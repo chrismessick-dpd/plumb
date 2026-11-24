@@ -81,7 +81,6 @@
           <button data-tab="tests" class="on">Tests</button>
           <button data-tab="bench">Bench</button>
           <button data-tab="explore">Telemetry and commands</button>
-          <button data-tab="defs">Targets</button>
           <button data-tab="research">Research</button>
         </div>
       </div>
@@ -138,6 +137,7 @@
   </section>
 
   <section class="tb-pane" data-pane="bench" hidden>
+    <p class="tb-pnote" id="bench-note">Each card is a target: its interface, live telemetry, and a command sender. Click a card to open its properties, where its definition is plain text you can edit.</p>
     <div class="tb-targets" id="targets"></div>
   </section>
 
@@ -166,12 +166,6 @@
         <div class="tb-card tb-ex-detail" id="ex-detail"></div>
       </div>
     </div>
-  </section>
-
-  <section class="tb-pane" data-pane="defs" hidden>
-    <p class="tb-pnote">Targets are defined in text too. Each has an <code>interface</code>, <code>command</code> lines (parameters with ranges or choices, and the text sent on the wire), and <code>telemetry</code> lines (unit, how it's read, and yellow and red limits in base units). Edit it and the Bench and the step checks follow.</p>
-    <textarea id="defs" class="tb-code tb-defs" spellcheck="false" wrap="off"></textarea>
-    <div class="tb-lint" id="defs-lint"></div>
   </section>
 
   <section class="tb-pane tb-research" data-pane="research" hidden>
@@ -252,6 +246,7 @@
     </div>
   </main>
 </div>
+<aside class="inspector" id="inspector" aria-label="Target properties"></aside>
 <div class="toasts" id="toasts"></div>
 
 <div class="tb-modal" id="modal" hidden>

@@ -918,11 +918,13 @@ suite Main PCBA
 
   function renderTargets() {
     const T = S.defs.targets;
+    const order = defBlocks(S.defsText).blocks.map((b) => b.name);
     $('#targets').innerHTML = Object.values(T).map((t) => {
       const ip = ifacePath(t.iface);
       const att = sim.attached[t.name];
       const cmds = Object.values(t.commands);
-      return '<div class="tb-card tb-target' + (att ? '' : ' off') + '" data-target="' + t.name + '">' +
+      const k = order.indexOf(t.name);
+      return '<div class="tb-card tb-target' + (att ? '' : ' off') + (k === INSP.k ? ' sel' : '') + '" data-target="' + t.name + '" data-k="' + k + '" title="Click for its properties">' +
         '<div class="tb-t-head"><div><div class="tb-t-name">' + esc(t.name) + '</div><div class="tb-t-title">' + esc(t.title) + '</div></div>' +
         '<span class="tb-t-state">' + (att ? '<i class="ok"></i>Attached' : '<i></i>Not attached') + '</span></div>' +
         '<div class="tb-t-iface"><span class="tb-chip">' + esc(ip.label) + '</span><span class="tb-dim">' + esc(ip.path) + ' · simulated here</span></div>' +
@@ -932,9 +934,124 @@ suite Main PCBA
         }).join('') + '</tbody></table>' : '<p class="tb-dim tb-notlm">No telemetry; commands return their data.</p>') +
         (cmds.length ? '<div class="tb-send"><select class="tb-select" data-act="pick-cmd">' + cmds.map((c) => '<option>' + esc(c.name) + '</option>').join('') + '</select><span class="tb-params"></span><button class="btn btn-primary" data-act="send"' + (att ? '' : ' disabled') + '>Send</button></div><div class="tb-sent"></div>' : '') +
         '</div>';
-    }).join('');
+    }).join('') + '<button class="tb-card tb-target-add" data-act="add-target"><span>+</span>Add a target<small>A supply, an instrument, or a board, defined in a few lines of text</small></button>';
     document.querySelectorAll('.tb-target').forEach((el) => drawParams(el));
+    const bad = S.defs.errors.length;
+    $('#bench-note').innerHTML = 'Each card is a target: its interface, live telemetry, and a command sender. Click a card to open its properties, where its definition is plain text you can edit.' +
+      (bad ? ' <span class="tb-lintmark">✕ ' + bad + ' line' + (bad > 1 ? 's' : '') + ' in the definitions to fix</span>' : '');
   }
+  /* ---------- Target properties: each target's own lines of the definitions text ---------- */
+
+  // The definitions stay one text (the file the tool would store); a target's properties show and edit only the
+  // lines from its `target` line up to the next one. Comments above the first target stay as they are.
+  function defBlocks(text) {
+    const lines = text.replace(/\r/g, '').split('\n');
+    const starts = [];
+    lines.forEach((l, i) => { const m = /^target\s+([A-Z][A-Z0-9_]*)/.exec(l.trim()); if (m && !/^\s/.test(l)) starts.push({ i, name: m[1] }); });
+    return { lines, blocks: starts.map((s, k) => ({ name: s.name, start: s.i, end: k + 1 < starts.length ? starts[k + 1].i : lines.length })) };
+  }
+  function blockText(b, lines) { return lines.slice(b.start, b.end).join('\n').replace(/\s+$/, ''); }
+  function setBlock(k, text) {
+    const d = defBlocks(S.defsText);
+    const b = d.blocks[k];
+    const tail = k === d.blocks.length - 1 ? '\n' : '\n\n';
+    const head = d.lines.slice(0, b ? b.start : d.lines.length).join('\n');
+    const rest = b ? d.lines.slice(b.end).join('\n') : '';
+    S.defsText = (head ? head.replace(/\s*$/, '\n\n') : '') + (text ? text.replace(/\s+$/, '') + tail : '') + (rest ? rest.replace(/^\s+/, '') : '');
+    S.defsText = S.defsText.replace(/\s+$/, '') + '\n';
+  }
+  function defsChanged() {
+    loadDefs(); reparse(true);
+    X.plotted = X.plotted.filter(unitFor2);
+    if (!$('[data-pane="bench"]').hidden) { renderTargets(); tickBench(); }
+  }
+
+  const INSP = { k: -1, timer: 0 };
+  function openTarget(k) {
+    INSP.k = k;
+    const d = defBlocks(S.defsText), b = d.blocks[k];
+    if (!b) return closeTarget();
+    $('#inspector').innerHTML =
+      '<div class="insp-head"><span class="insp-crumb" id="insp-crumb">Bench › ' + esc(b.name) + '</span>' +
+      '<button class="icon-btn" data-act="insp-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>' +
+      '<div class="insp-body">' +
+      '<div class="insp-title" id="insp-title"></div>' +
+      '<div class="tb-insp-iface" id="insp-iface"></div>' +
+      '<div class="field"><label for="insp-def">Definition</label>' +
+      '<textarea id="insp-def" class="tb-code tb-insp-def" spellcheck="false" wrap="off">' + esc(blockText(b, d.lines)) + '</textarea>' +
+      '<div class="tb-lint" id="insp-lint"></div></div>' +
+      '<div class="hint"><b>The format</b><code>interface</code> serial, lan, or usb and its settings; <code>command name p=0..30V q=on|off "WIRE {p}"</code>, with <code>-&gt; name</code> when it returns data; <code>telemetry name unit "query" yellow lo..hi red lo..hi</code>, limits in base units, <code>-</code> for a value without a unit.</div>' +
+      '<div class="tb-insp-acts"><button class="btn btn-danger" data-act="insp-remove">Remove target</button></div>' +
+      '</div>';
+    $('#inspector').classList.add('open');
+    inspFill();
+    document.querySelectorAll('.tb-target').forEach((el) => el.classList.toggle('sel', el.dataset.k === String(k)));
+  }
+  // Everything in the panel but the text box, so typing never loses its place.
+  function inspFill() {
+    const d = defBlocks(S.defsText), b = d.blocks[INSP.k];
+    if (!b) return;
+    const t = S.defs.targets[b.name];
+    $('#insp-crumb').textContent = 'Bench › ' + b.name;
+    $('#insp-title').textContent = t ? t.title || b.name : b.name;
+    const ip = t && ifacePath(t.iface);
+    $('#insp-iface').innerHTML = t ? '<span class="tb-chip">' + esc(ip.label) + '</span><span class="tb-dim">' + esc(ip.path) + '</span>' +
+      '<span class="tb-dim">' + Object.keys(t.commands).length + ' commands · ' + t.order.length + ' telemetry · used by ' + (usedByTarget(b.name).join(', ') || 'no test') + '</span>' : '';
+    const errs = S.defs.errors.filter((x) => x.line - 1 >= b.start && x.line - 1 < b.end);
+    const dup = Object.keys(S.defs.targets).length < d.blocks.length && d.blocks.filter((x) => x.name === b.name).length > 1;
+    $('#insp-lint').innerHTML = errs.length || dup
+      ? (dup ? '<div class="tb-lint-row"><span>Name</span>Another target is also called ' + esc(b.name) + '</div>' : '') +
+        errs.map((x) => '<div class="tb-lint-row"><span>Line ' + (x.line - b.start) + '</span>' + esc(x.msg) + '</div>').join('')
+      : '<div class="tb-lint-ok">✓ Reads cleanly</div>';
+  }
+  function usedByTarget(name) {
+    const out = new Set();
+    Object.values(S.tree.tests).forEach((t) => { if (needsOf(t, S.tree).has(name)) out.add(t.id); });
+    return [...out];
+  }
+  function closeTarget() {
+    INSP.k = -1;
+    $('#inspector').classList.remove('open');
+    document.querySelectorAll('.tb-target.sel').forEach((el) => el.classList.remove('sel'));
+  }
+  function addTarget() {
+    let n = 1; while (S.defs.targets['NEW' + n]) n++;
+    const d = defBlocks(S.defsText);
+    setBlock(d.blocks.length, 'target NEW' + n + ' "New target"\n  interface serial COM1 115200 line\n  command ping "ping"\n  telemetry state - "status?"');
+    sim.attached['NEW' + n] = false;
+    defsChanged();
+    openTarget(d.blocks.length);
+    const ta = $('#insp-def'); ta.focus(); ta.setSelectionRange(7, 7 + ('NEW' + n).length);
+  }
+  function removeTarget() {
+    const before = S.defsText, d = defBlocks(S.defsText), b = d.blocks[INSP.k];
+    if (!b) return;
+    setBlock(INSP.k, '');
+    closeTarget(); defsChanged();
+    const el = document.createElement('div');
+    el.className = 'toast'; el.innerHTML = 'Removed ' + esc(b.name) + '<button class="toast-act">Undo</button>';
+    el.querySelector('button').onclick = () => { S.defsText = before; defsChanged(); el.remove(); };
+    $('#toasts').appendChild(el); setTimeout(() => el.remove(), 6000);
+  }
+  function bindInspector() {
+    const ins = $('#inspector');
+    ins.addEventListener('click', (e) => {
+      const a = e.target.closest('[data-act]'); if (!a) return;
+      if (a.dataset.act === 'insp-close') closeTarget();
+      if (a.dataset.act === 'insp-remove') removeTarget();
+    });
+    ins.addEventListener('input', (e) => {
+      if (e.target.id !== 'insp-def') return;
+      clearTimeout(INSP.timer);
+      INSP.timer = setTimeout(() => {
+        setBlock(INSP.k, e.target.value);
+        defsChanged(); inspFill();
+        document.querySelectorAll('.tb-target').forEach((el) => el.classList.toggle('sel', el.dataset.k === String(INSP.k)));
+      }, 300);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ins.classList.contains('open')) closeTarget(); });
+  }
+
   function limText(tl) {
     const f = (r) => (r[0] === -Infinity || r[0] === 0 && r[1] !== Infinity ? '≤ ' + fmtQty(r[1], tl.unit) : r[1] === Infinity ? '≥ ' + fmtQty(r[0], tl.unit) : fmtQty(r[0], tl.unit) + ' to ' + fmtQty(r[1], tl.unit));
     return tl.yellow ? 'limit ' + f(tl.yellow) : tl.red ? 'limit ' + f(tl.red) : '';
@@ -1475,7 +1592,7 @@ suite Main PCBA
       const b = e.target.closest('button'); if (!b) return;
       document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
       document.querySelectorAll('.tb-pane').forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.tab; });
-      if (b.dataset.tab === 'bench') { renderTargets(); tickBench(); }
+      if (b.dataset.tab === 'bench') { renderTargets(); tickBench(); } else closeTarget();
       if (b.dataset.tab === 'explore') renderExplorer();
     });
     $('#theme-btn').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true));
@@ -1507,10 +1624,6 @@ suite Main PCBA
 
     let deb = 0;
     $('#script').addEventListener('input', (e) => { clearTimeout(deb); deb = setTimeout(() => { S.text = e.target.value; reparse(true); }, 250); });
-    $('#defs').addEventListener('input', (e) => {
-      clearTimeout(deb);
-      deb = setTimeout(() => { S.defsText = e.target.value; loadDefs(); reparse(true); X.plotted = X.plotted.filter(unitFor2); }, 300);
-    });
 
     const rows = $('#rows');
     rows.addEventListener('click', (e) => {
@@ -1556,6 +1669,11 @@ suite Main PCBA
     const targets = $('#targets');
     targets.addEventListener('change', (e) => { if (e.target.dataset.act === 'pick-cmd') drawParams(e.target.closest('.tb-target')); });
     targets.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act="add-target"]')) { addTarget(); return; }
+      const card = e.target.closest('.tb-target');
+      if (card && !e.target.closest('.tb-tk, select, input, button, .tb-send')) { openTarget(+card.dataset.k); return; }
+    });
+    targets.addEventListener('click', (e) => {
       const k = e.target.closest('.tb-tk'); if (!k) return;
       const key = k.closest('.tb-target').dataset.target + '.' + k.closest('tr').dataset.tlm;
       if (!X.plotted.includes(key)) X.plotted.push(key);
@@ -1580,9 +1698,6 @@ suite Main PCBA
 
   function loadDefs() {
     S.defs = parseDefs(S.defsText);
-    $('#defs-lint').innerHTML = S.defs.errors.length
-      ? S.defs.errors.map((x) => '<div class="tb-lint-row"><span>Line ' + x.line + '</span>' + esc(x.msg) + '</div>').join('')
-      : '<div class="tb-lint-ok">✓ ' + Object.keys(S.defs.targets).length + ' targets read.</div>';
     Object.keys(S.defs.targets).forEach((k) => { if (!(k in sim.attached)) sim.attached[k] = false; });
     renderAttach();
   }
@@ -1593,11 +1708,11 @@ suite Main PCBA
     setTheme(dark ? 'dark' : 'light');
     try { if (localStorage.getItem('plumb.lab.side')) $('#app').classList.add('side-collapsed'); } catch (e) { /* storage off */ }
     setView(S.view);
-    $('#defs').value = S.defsText;
     loadDefs();
     reparse(false);
     bind();
     bindExplorer();
+    bindInspector();
     setRate(X.rate);
     requestAnimationFrame(plotLoop);
     setInterval(tickBench, 250);
