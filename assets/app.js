@@ -323,6 +323,7 @@ suite Main PCBA
     if ((m = /^repeat\s+(\d+)$/.exec(text))) return { kind: 'repeat', n: +m[1] };
     if ((m = /^for\s+([a-z_]\w*)\s+in\s+(.+)$/.exec(text))) return { kind: 'for', v: m[1], items: m[2].split(',').map((s) => s.trim()).filter(Boolean) };
     if (text === 'script') return { kind: 'script' };
+    if (text === 'script on bridge') return { kind: 'script', bridge: true };
     if (text === 'cleanup') return { kind: 'cleanup' };
     if ((m = /^([A-Z][A-Z0-9_]*)\.([A-Za-z_][\w$]*)\s*(.*?)(?:\s*->\s*([a-z_]\w*))?$/.exec(text))) {
       return { kind: 'command', target: m[1], cmd: m[2], args: tokenize(m[3]), into: m[4] || null };
@@ -334,7 +335,7 @@ suite Main PCBA
     const out = [];
     for (let i = 0; i < raw.length; i++) {
       const t = raw[i], nx = raw[i + 1];
-      if (/^[-+]?[\d.]+$/.test(t) && nx && unitOf(nx) && unitOf(nx).unit) { out.push(t + ' ' + nx); i++; } else out.push(t.replace(/^"|"$/g, ''));
+      if (/^(?:[-+]?[\d.]+|\$[a-z_]\w*)$/.test(t) && nx && unitOf(nx) && unitOf(nx).unit) { out.push(t + ' ' + nx); i++; } else out.push(t.replace(/^"|"$/g, ''));
     }
     return out;
   }
@@ -618,7 +619,9 @@ suite Main PCBA
   }
 
   async function execStep(n, ctx, vars) {
-    const text = sub(n.text, vars);
+    const kept = {};
+    Object.keys(ctx.vars).forEach((k) => { const x = ctx.vars[k]; kept[k] = x && typeof x === 'object' && 'v' in x ? x.v : x; });
+    const text = sub(n.text, Object.assign(kept, vars));
     const s = parseStep(text);
     const t0 = now();
     try {
@@ -746,7 +749,13 @@ suite Main PCBA
     });
   }
 
+  function bridgeIn(nodes) { return nodes.some((n) => (n.kind === 'step' && n.step.kind === 'script' && n.step.bridge) || bridgeIn(n.children || [])); }
   async function runTest(test) {
+    if (bridgeIn(test.children)) {
+      S.results[test.id] = { verdict: 'skip', note: 'Runs in the bench bridge', at: Date.now() };
+      log('skip', test.id + ' skipped: it runs in the bench bridge, which reaches what the page can\u2019t');
+      renderRows(); return;
+    }
     const need = [...needsOf(test, S.tree)];
     const missing = need.filter((t) => !S.defs.targets[t] || !sim.attached[t]);
     if (missing.length) {
@@ -890,7 +899,7 @@ suite Main PCBA
     if (iss) h += '<div class="tb-step-issue" style="--d:' + depth + '">✕ ' + esc(iss.join('; ')) + '</div>';
     if (editing) h += '<div class="tb-sform-wrap" style="--d:' + depth + '">' + formHtml() + '</div>';
     if (kind === 'script' && !editing) {
-      h += '<pre class="tb-sbody" style="--d:' + (depth + 1) + '"><span class="tb-py-label">Python</span>' + esc(n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n')) + '</pre>';
+      h += '<pre class="tb-sbody" style="--d:' + (depth + 1) + '"><span class="tb-py-label">' + (n.step.bridge ? 'Python · bench bridge' : 'Python') + '</span>' + esc(n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n')) + '</pre>';
     }
     h += n.children.map((c) => stepHtml(c, depth + 1)).join('');
     if (S.form && S.form.mode !== 'edit' && S.form.after === n.idx) h += '<div class="tb-sform-wrap" style="--d:' + depth + '">' + formHtml() + '</div>';
@@ -989,6 +998,7 @@ suite Main PCBA
     if (kind === 'call') v.id = s.id || '';
     if (kind === 'repeat') v.n = s.n || 3;
     if (kind === 'for') { v.var = s.v || 'n'; v.items = s.items ? s.items.join(', ') : '1, 2'; }
+    if (kind === 'script') v.bridge = !!s.bridge;
     if (kind === 'script') v.body = n ? n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n') : "# cmd(), tlm(), wait(), log(), and record() reach the bench\nlog('Hello from Python')";
     return v;
   }
@@ -1083,7 +1093,7 @@ suite Main PCBA
       case 'call': return 'call ' + v.id;
       case 'repeat': return 'repeat ' + (parseInt(v.n, 10) || 1);
       case 'for': return 'for ' + (String(v.var || 'n').trim().replace(/\W+/g, '_')) + ' in ' + String(v.items || '').split(',').map((x) => x.trim()).filter(Boolean).join(', ');
-      case 'script': return 'script';
+      case 'script': return v.bridge ? 'script on bridge' : 'script';
       case 'cleanup': return 'cleanup';
     }
     return '';
@@ -1312,8 +1322,9 @@ suite Main PCBA
       row('ask', 'ask "Is the LED green?"', 'Yes or No for the operator; No fails the test. <code>tell</code> and <code>log</code> work the same way.') +
       row('call', 'call PWR-01', 'Runs that test’s steps here; its cleanup waits until this test ends.') +
       row('repeat', 'repeat 3', 'Repeats the indented steps; <code>$i</code> is the count.') +
-      row('for', 'for n in 1, 2', 'Runs the indented steps once per item; write <code>$n</code> in them.') +
+      row('for', 'for n in 1, 2', 'Runs the indented steps once per item; write <code>$n</code> in them. A value kept by <code>measure</code>, <code>-&gt;</code>, or <code>record</code> goes into a command the same way: <code>PSU.set_voltage $v0 V</code>.') +
       row('script', 'script', 'Python, indented under it. <code>cmd(\'PSU.set_voltage\', \'24 V\')</code>, <code>tlm(\'MAIN.state\')</code>, <code>wait(150)</code>, <code>log(\'…\')</code>, <code>record(\'name\', value, \'V\')</code>.') +
+      row('script', 'script on bridge', 'Python for the bench bridge: a debug probe, a mounted drive, or files on disk, which the page can\u2019t reach. A test holding one skips here, marked <b>Runs in the bench bridge</b>.') +
       row('cleanup', 'cleanup', 'The indented steps always run when the test ends, even after a failure or Abort.') +
       '</tbody></table>' +
       '<h4>Units</h4><p class="tb-dim">V, mV, µV (or uV) · A, mA, µA · Hz, kHz, MHz · s, ms · W, mW · °C · %. A space goes between the number and the unit: <code>50 mV</code> is 0.05 V.</p>' +

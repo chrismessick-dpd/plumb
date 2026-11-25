@@ -54,11 +54,24 @@ project; the page head links the board in Signoff EE (`?project=<id>`).
   the open bench's targets.
 
 **In `plumb_data`** (2026-11-24, at Chris's OK after a dry run): `projects/bgenerator1.json`, a client's bench
-(`64a725f`). It is generated, not typed: a private script reads the firmware source and the client's pytest suite
-(see the root `CLAUDE.md`, never this repo). Re-generate it there rather than editing its definitions by hand.
+(`64a725f`). Its device target is generated from the firmware source by a private script, and its tests are
+written by hand in a private file that script reads (see the root `CLAUDE.md`, never this repo). Change them
+there rather than in the page, or the next write replaces the page's edits (the script refuses to overwrite a
+copy that changed since it last wrote).
 
 - **`todo "…"`** (a step kind): a step not written yet. The test skips, marked Not written yet, so a stub never
   passes. Telemetry and command names may start with a capital (firmware fields). Pushed: `06e8a67`.
+- **`script on bridge`** (2026-11-24, Chris): Python the page can't run (a debug probe, a mounted drive, files on
+  disk), kept like a `script`'s body. A test holding one skips before anything runs, marked Runs in the bench
+  bridge (`bridgeIn`, `runTest`), so it never half-runs in the page. The Python names bridge calls (`bridge.drive`,
+  `bridge.probe`) the bridge doesn't have yet: the bridge's API is still to design.
+- **`$name` of a kept value** (2026-11-24): a step's `$name` is a `for` or `repeat` variable, else a value kept
+  earlier in the test by `measure`, `->`, or `record`, so a cleanup can restore what it found
+  (`GEN.setMaxPWM $max0`). Lint reads `$v0 V` as one parameter. Conditions still take numbers, not `$name`.
+  Not pushed (with `script on bridge`).
+- **Device facts as points.** No bit conditions yet, so a status word's bits are telemetry points of their own
+  (`"bit faultFlags 5"`), and scaled integers get their real unit, with the scale in the query (`"field X ÷10"`):
+  lint compares a check's unit with the point's.
 
 ## Next (to sequence with Chris)
 
@@ -71,6 +84,8 @@ project; the page head links the board in Signoff EE (`?project=<id>`).
 4. The step-language growth in `docs/generator-suite.md` section 3, and pytest import and export (section 1).
 5. The bench bridge (Python, localhost WebSocket); the bridge always owns the device's port (Chris).
 6. A hub link only when Chris says so.
+6a. Before any interface is real: a test that energizes a load (the client bench's heating group) must refuse to run
+   in the page and run from the bridge. Today only a group comment says so, and nothing enforces it.
 7. Sign out leaves `plumb.v1.*` benches in the browser. Adding `plumb.v1.` to `SUITE_NS` means changing EE's
    `app.js` and the hub's `sidefoot.js` together (keep them in step); for Chris to sequence.
 
