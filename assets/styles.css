@@ -72,6 +72,11 @@
 }
 :root[data-theme="dark"] .tb-py-label { color: #ffc56b; background: rgba(255, 159, 10, 0.2); }
 :root[data-theme="dark"] .tb-bl.py-head, :root[data-theme="dark"] .tb-bl.py-body { background: rgba(255, 159, 10, 0.12); }
+.tb-bl.pick { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.tb-bl.pick-first { border-radius: 6px 6px 0 0; }
+.tb-bl.pick-last { border-radius: 0 0 6px 6px; }
+.tb-bl.pick-first.pick-last { border-radius: 6px; }
+.tb-test-row.picked, .tb-step.picked { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .tb-defs { min-height: 64vh; }
 .tb-lint { font-size: 12.5px; }
 .tb-lint-row { display: flex; gap: 10px; padding: 4px 8px; border-radius: 6px; background: var(--issue-hatch), var(--issue-soft); color: var(--text); margin-bottom: 4px; }

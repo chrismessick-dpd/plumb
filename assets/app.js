@@ -520,11 +520,46 @@ suite Main PCBA
       const last = n.body.length ? n.body[n.body.length - 1] : n.idx;
       for (let i = n.idx + 1; i <= last; i++) py.set(i, 'body');
     });
+    const pk = S.pick != null && lines[S.pick] && lines[S.pick].text ? [S.pick, subtreeEnd(lines, S.pick)] : null;
     $('#script-bg').innerHTML = lines.map((l, i) => {
       const k = py.get(i), txt = esc(l.text ? ' '.repeat(l.lead) + l.text : '') || ' ';
-      return '<span class="tb-bl' + (k ? ' py-' + k : '') + '">' + txt + (k === 'head' ? '<span class="tb-py-label">Python</span>' : '') + '</span>';
+      const on = pk && i >= pk[0] && i < pk[1];
+      return '<span class="tb-bl' + (k ? ' py-' + k : '') + (on ? ' pick' + (i === pk[0] ? ' pick-first' : '') + (i === pk[1] - 1 ? ' pick-last' : '') : '') + '">' + txt + (k === 'head' ? '<span class="tb-py-label">Python</span>' : '') + '</span>';
     }).join('');
     syncCodeBg();
+  }
+  // Picking: a row picked marks its lines in the script, and the caret in the script picks its row (Side by side).
+  function nodeAtLine(tree, line) {
+    let best = null;
+    tree.nodes.forEach((n) => {
+      if (n.kind !== 'test' && n.kind !== 'step') return;
+      if (n.idx <= line && line < subtreeEnd(tree.lines, n.idx) && (!best || n.idx > best.idx)) best = n;
+    });
+    return best;
+  }
+  function testOf(n) { while (n && n.kind !== 'test') n = n.parent; return n; }
+  function scrollScriptTo(line) {
+    const ta = $('#script'); if (!ta || !ta.offsetParent) return;
+    const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 19, top = parseFloat(cs.paddingTop) + line * lh;
+    if (top < ta.scrollTop || top + lh > ta.scrollTop + ta.clientHeight) { ta.scrollTop = Math.max(0, top - ta.clientHeight / 3); syncCodeBg(); }
+  }
+  function pickFromRows(idx) {
+    if (S.pick === idx) return;
+    S.pick = idx; renderCodeBg(S.tree); scrollScriptTo(idx);
+    document.querySelectorAll('#rows .picked').forEach((x) => x.classList.remove('picked'));
+    const el = document.querySelector('#rows [data-pick="' + idx + '"]'); if (el) el.classList.add('picked');
+  }
+  function pickFromScript() {
+    const ta = $('#script'); if (!S.tree || ta.value !== S.text) return;
+    const line = ta.value.slice(0, ta.selectionStart).split('\n').length - 1;
+    const n = nodeAtLine(S.tree, line), idx = n ? n.idx : null;
+    if (idx === S.pick) return;
+    S.pick = idx; renderCodeBg(S.tree);
+    if (!n) { document.querySelectorAll('#rows .picked').forEach((x) => x.classList.remove('picked')); return; }
+    const t = testOf(n); if (t && !S.open.has(t.id)) S.open.add(t.id);
+    renderRows();
+    const el = document.querySelector('#rows [data-pick="' + idx + '"]');
+    if (el && $('#rows').offsetParent) el.scrollIntoView({ block: 'nearest' });
   }
   function syncCodeBg() { const ta = $('#script'), bg = $('#script-bg'); bg.scrollTop = ta.scrollTop; bg.scrollLeft = ta.scrollLeft; }
   function setLines(lines) { S.text = serialize(lines); reparse(false); }
@@ -880,7 +915,7 @@ suite Main PCBA
     const nIssues = countIssues(t);
     const meas = r && r.measurements ? r.measurements.slice(-2).map((m) => '<span class="tb-meas' + (m.ok ? '' : ' bad') + '">' + esc(m.name.replace(/^[A-Z]+\./, '')) + ' ' + esc(typeof m.value === 'number' ? fmtQty(m.value, m.unit) : m.value) + '</span>').join('') : '';
     let h = '<div class="tb-test' + (open ? ' open' : '') + (r && r.verdict === 'running' ? ' running' : '') + '">' +
-      '<div class="tb-test-row" data-act="toggle" data-id="' + esc(t.id) + '">' +
+      '<div class="tb-test-row' + (S.pick === t.idx ? ' picked' : '') + '" data-act="toggle" data-id="' + esc(t.id) + '" data-pick="' + t.idx + '">' +
       '<span class="tb-chev">' + (open ? '▾' : '▸') + '</span>' + badge(r && r.verdict) +
       '<span class="tb-id">' + esc(t.id) + '</span><span class="tb-ttl">' + esc(t.title) + (nIssues ? ' <span class="tb-lintmark" title="' + nIssues + ' line' + (nIssues > 1 ? 's' : '') + ' to fix">✕ ' + nIssues + '</span>' : '') + '</span>' +
       '<span class="tb-needs">' + need.map((x) => '<span class="tb-chip' + (sim.attached[x] && S.defs.targets[x] ? '' : ' off') + '" title="' + (sim.attached[x] ? 'Uses ' : 'Needs, not attached: ') + x + '">' + esc(x) + '</span>').join('') + '</span>' +
@@ -908,7 +943,7 @@ suite Main PCBA
     const editing = S.form && S.form.mode === 'edit' && S.form.idx === n.idx;
     const dis = S.running ? ' disabled' : '';
     const formable = kind !== 'bad' && kind !== 'cleanup';
-    let h = '<div class="tb-step k-' + kind + (cur ? ' cur' : '') + (editing ? ' editing' : '') + '" style="--d:' + depth + '" data-step="' + n.idx + '">' +
+    let h = '<div class="tb-step k-' + kind + (cur ? ' cur' : '') + (editing ? ' editing' : '') + (S.pick === n.idx ? ' picked' : '') + '" style="--d:' + depth + '" data-step="' + n.idx + '" data-pick="' + n.idx + '">' +
       '<span class="tb-grip" title="Drag to move, or Alt+↑ and Alt+↓">⠿</span>' +
       (formable ? '<button class="tb-skind" data-act="form" data-idx="' + n.idx + '" title="Edit with a form"' + dis + '>' + esc(KIND_LABEL[kind] || kind) + '</button>' : '<span class="tb-skind">' + esc(KIND_LABEL[kind] || kind) + '</span>') +
       '<input class="tb-sedit" data-act="edit" data-idx="' + n.idx + '" value="' + esc(n.text) + '"' + (S.running ? ' readonly' : '') + ' title="The line itself; click the kind on the left for a form">' +
@@ -2031,6 +2066,7 @@ suite Main PCBA
     if (S.running && id !== CUR) { toast('A test is running: Abort it first, then switch benches'); renderSide(); return false; }
     const p = id && ST.get(id);
     CUR = p ? p.id : null;
+    S.pick = null;
     try { localStorage.setItem(CUR_KEY, CUR || ''); } catch (e) { /* storage off */ }
     $('#empty').hidden = !!p; $('.plumb-page').hidden = !p;
     $('#run-all').disabled = !p || S.running;
@@ -2303,11 +2339,14 @@ suite Main PCBA
 
     let deb = 0;
     $('#script').addEventListener('scroll', syncCodeBg);
+    ['click', 'keyup', 'focus'].forEach((ev) => $('#script').addEventListener(ev, () => setTimeout(pickFromScript, 0)));
     $('#script').addEventListener('input', (e) => { renderCodeBg(parseScript(e.target.value)); });
     $('#script').addEventListener('input', (e) => { clearTimeout(deb); deb = setTimeout(() => { S.text = e.target.value; reparse(true); }, 250); });
 
     const rows = $('#rows');
     rows.addEventListener('click', (e) => {
+      const pk = e.target.closest('[data-pick]');
+      if (pk) pickFromRows(+pk.dataset.pick);
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
       if (act === 'fold' && !e.target.closest('button')) { const f = foldedSet(), k = a.dataset.name; f.has(k) ? f.delete(k) : f.add(k); saveFolded(f); renderRows(); return; }
