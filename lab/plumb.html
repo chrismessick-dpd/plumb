@@ -11,7 +11,7 @@
 <meta name="color-scheme" content="light dark">
 <title>Plumb lab</title>
 <link rel="stylesheet" href="../../signoff/assets/suite.css">
-<link rel="stylesheet" href="plumb.css">
+<link rel="stylesheet" href="plumb.css?v=4">
 </head>
 <body>
 <div class="app" id="app">
@@ -120,7 +120,7 @@
     <div class="tb-tests" id="tests-wrap">
       <div class="tb-rows" id="rows"></div>
       <div class="tb-textcol" id="textcol">
-        <textarea id="script" class="tb-code" spellcheck="false" wrap="off"></textarea>
+        <div class="tb-codewrap"><pre class="tb-code-bg" id="script-bg" aria-hidden="true"></pre><textarea id="script" class="tb-code" spellcheck="false" wrap="off"></textarea></div>
         <div class="tb-lint" id="lint"></div>
       </div>
     </div>
@@ -257,6 +257,6 @@
   </div>
 </div>
 
-<script src="plumb.js"></script>
+<script src="plumb.js?v=4"></script>
 </body>
 </html>

@@ -178,10 +178,10 @@ suite Main PCBA
         v = 24.0
         while v > 6:
             v -= 0.5
-            await cmd('PSU.set_voltage', f'{v} V')
-            await wait(150)
+            cmd('PSU.set_voltage', f'{v} V')
+            wait(150)
             try:
-                state = await tlm('MAIN.state')
+                state = tlm('MAIN.state')
             except Exception:
                 state = 'OFF'
             if state != 'RUN':
@@ -503,8 +503,26 @@ suite Main PCBA
     S.tree = parseScript(S.text);
     S.issues = lint(S.tree, S.defs);
     if (!fromText) $('#script').value = S.text;
+    renderCodeBg(S.tree);
     renderRows(); renderLint(); renderRoundTrip(); renderEvidence(); renderSummary();
   }
+  // Script view: a picture of the text behind the transparent text box, tinting each script step's Python lines and
+  // labeling the step. Same font, padding, and scroll as the box, so the tints sit under their lines.
+  function renderCodeBg(tree) {
+    const lines = tree.lines, py = new Map();
+    tree.nodes.forEach((n) => {
+      if (n.kind !== 'step' || n.step.kind !== 'script') return;
+      py.set(n.idx, 'head');
+      const last = n.body.length ? n.body[n.body.length - 1] : n.idx;
+      for (let i = n.idx + 1; i <= last; i++) py.set(i, 'body');
+    });
+    $('#script-bg').innerHTML = lines.map((l, i) => {
+      const k = py.get(i), txt = esc(l.text ? ' '.repeat(l.lead) + l.text : '') || ' ';
+      return '<span class="tb-bl' + (k ? ' py-' + k : '') + '">' + txt + (k === 'head' ? '<span class="tb-py-label">Python</span>' : '') + '</span>';
+    }).join('');
+    syncCodeBg();
+  }
+  function syncCodeBg() { const ta = $('#script'), bg = $('#script-bg'); bg.scrollTop = ta.scrollTop; bg.scrollLeft = ta.scrollLeft; }
   function setLines(lines) { S.text = serialize(lines); reparse(false); }
 
   /* ---------- Running ---------- */
@@ -667,11 +685,11 @@ suite Main PCBA
   const PY = { w: null, state: 'off', handler: null };
   function pyWorker() {
     if (PY.w) return PY.w;
-    PY.w = new Worker('script-worker.js');
+    PY.w = new Worker('script-worker.js?v=4');
     PY.state = 'loading'; renderPy();
     PY.w.onmessage = (e) => {
       const m = e.data;
-      if (m.type === 'loaded') { PY.state = 'ready'; PY.version = m.version; log('info', 'Python ' + m.version + ' loaded in ' + fmtQty(m.ms / 1000, 's')); renderPy(); return; }
+      if (m.type === 'loaded') { PY.state = 'ready'; PY.version = m.version; PY.sync = m.sync; log('info', 'Python ' + m.version + ' loaded in ' + fmtQty(m.ms / 1000, 's') + (m.sync ? '' : '. This browser can’t pause Python for the bench, so cmd, tlm, and wait work only at a script’s top level, not inside a def')); renderPy(); return; }
       if (m.type === 'loadfail') { PY.state = 'failed'; log('error', 'Python didn\'t load: ' + m.message); renderPy(); return; }
       if (PY.handler) PY.handler(m);
     };
@@ -855,7 +873,7 @@ suite Main PCBA
       '<button class="tb-x" data-act="del" data-idx="' + n.idx + '" title="Delete this step"' + (S.running ? ' disabled' : '') + '>×</button></div>';
     if (iss) h += '<div class="tb-step-issue" style="--d:' + depth + '">✕ ' + esc(iss.join('; ')) + '</div>';
     if (kind === 'script') {
-      h += '<pre class="tb-sbody" style="--d:' + (depth + 1) + '">' + esc(n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n')) + '</pre>';
+      h += '<pre class="tb-sbody" style="--d:' + (depth + 1) + '"><span class="tb-py-label">Python</span>' + esc(n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n')) + '</pre>';
     }
     h += n.children.map((c) => stepHtml(c, depth + 1)).join('');
     return h;
@@ -1623,6 +1641,8 @@ suite Main PCBA
     $('#log-clear').addEventListener('click', () => { S.log = []; renderLog(); });
 
     let deb = 0;
+    $('#script').addEventListener('scroll', syncCodeBg);
+    $('#script').addEventListener('input', (e) => { renderCodeBg(parseScript(e.target.value)); });
     $('#script').addEventListener('input', (e) => { clearTimeout(deb); deb = setTimeout(() => { S.text = e.target.value; reparse(true); }, 250); });
 
     const rows = $('#rows');

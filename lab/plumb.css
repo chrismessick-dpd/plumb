@@ -56,6 +56,22 @@
 }
 .tb-code:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .tb-code[readonly] { opacity: 0.75; }
+/* Script view: the text box is transparent over a picture of its lines (#script-bg) that tints Python */
+.tb-codewrap { position: relative; border-radius: var(--radius-sm); background: var(--bg-elev); }
+.tb-codewrap .tb-code { position: relative; z-index: 1; background: transparent; display: block; }
+.tb-code-bg {
+  position: absolute; inset: 0; margin: 0; overflow: hidden; pointer-events: none; box-sizing: border-box;
+  padding: 12px 14px; border: 1px solid transparent; font: 12.5px/1.55 var(--mono); tab-size: 2; white-space: pre; color: transparent;
+}
+.tb-bl { display: block; min-width: max-content; }
+.tb-bl.py-head { background: rgba(255, 159, 10, 0.10); border-radius: 6px 6px 0 0; box-shadow: inset 3px 0 0 #ff9f0a; }
+.tb-bl.py-body { background: rgba(255, 159, 10, 0.10); box-shadow: inset 3px 0 0 #ff9f0a; }
+.tb-py-label {
+  display: inline-block; margin-left: 10px; padding: 0 6px; border-radius: 4px; font: 600 10px/16px var(--sans); letter-spacing: 0.04em;
+  text-transform: uppercase; color: #8a5300; background: rgba(255, 159, 10, 0.22); vertical-align: 1px;
+}
+:root[data-theme="dark"] .tb-py-label { color: #ffc56b; background: rgba(255, 159, 10, 0.2); }
+:root[data-theme="dark"] .tb-bl.py-head, :root[data-theme="dark"] .tb-bl.py-body { background: rgba(255, 159, 10, 0.12); }
 .tb-defs { min-height: 64vh; }
 .tb-lint { font-size: 12.5px; }
 .tb-lint-row { display: flex; gap: 10px; padding: 4px 8px; border-radius: 6px; background: var(--issue-hatch), var(--issue-soft); color: var(--text); margin-bottom: 4px; }
@@ -136,7 +152,8 @@
 .tb-step:hover .tb-x { opacity: 1; }
 .tb-x:hover { background: var(--issue-soft); color: var(--issue); }
 .tb-step-issue { font-size: 11.5px; color: var(--issue); padding: 0 0 4px calc(var(--d) * 20px + 100px); }
-.tb-sbody { margin: 2px 30px 4px calc(var(--d) * 20px + 100px); padding: 8px 10px; font: 12px/1.5 var(--mono); background: var(--bg-sunk); border-radius: 7px; overflow-x: auto; color: var(--text-2); }
+.tb-sbody { position: relative; margin: 2px 30px 4px calc(var(--d) * 20px + 100px); padding: 8px 10px; font: 12px/1.5 var(--mono); background: rgba(255, 159, 10, 0.10); box-shadow: inset 3px 0 0 #ff9f0a; border-radius: 7px; overflow-x: auto; color: var(--text); }
+.tb-sbody .tb-py-label { position: absolute; top: 6px; right: 8px; margin: 0; }
 .tb-addrow { display: flex; align-items: center; gap: 12px; padding: 8px 0 0 94px; }
 .tb-orphan { padding: 6px 12px; font: 12.5px var(--mono); }
 .tb-empty { color: var(--text-3); padding: 20px; }
