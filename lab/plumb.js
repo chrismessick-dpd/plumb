@@ -267,7 +267,7 @@ suite Main PCBA
 
   const REF = '([A-Z][A-Z0-9_]*\\.[a-z_][\\w$]*|[a-z_]\\w*)';
   function parseCond(s) {
-    s = s.trim();
+    s = s.trim().replace(/\s*(?:\+\/-|\+-)\s*/g, ' ± '); // +/- and +- are ± for keyboards without it
     let m;
     if ((m = /^contains\s+"(.*)"$/.exec(s))) return { op: 'contains', a: m[1] };
     if ((m = /^(==|=)\s*"(.*)"$/.exec(s))) return { op: '==', a: m[2], str: true };
@@ -500,6 +500,7 @@ suite Main PCBA
   try { const v = localStorage.getItem('plumb.lab.view'); if (v) S.view = v; } catch (e) { /* storage off */ }
 
   function reparse(fromText) {
+    if (fromText) S.form = null; // typed in the Script view: an open form's line may have moved
     S.tree = parseScript(S.text);
     S.issues = lint(S.tree, S.defs);
     if (!fromText) $('#script').value = S.text;
@@ -605,7 +606,7 @@ suite Main PCBA
   // A block's cleanup is registered when the block starts, wherever it's written, so it runs even when a
   // step before it fails or the run is aborted.
   async function execBlock(nodes, ctx, vars) {
-    nodes.forEach((n) => { if (n.kind === 'step' && n.step.kind === 'cleanup') ctx.cleanups.push({ nodes: n.children, vars, node: n }); });
+    nodes.forEach((n) => { if (n.kind === 'step' && n.step.kind === 'cleanup') ctx.cleanups.push({ nodes: n.children, vars, node: n, depth: ctx.depth, seq: ctx.cleanups.length }); });
     for (const n of nodes) {
       if (n.kind !== 'step' || n.step.kind === 'cleanup') continue;
       if (S.abort && !S.inCleanup) throw new Abort('Aborted');
@@ -767,7 +768,10 @@ suite Main PCBA
     if (ctx.cleanups.length) {
       S.inCleanup = true;
       log('info', 'Cleanup (always runs)');
-      for (const c of ctx.cleanups.reverse()) {
+      // The test's own cleanup first, then those of the tests it called (a call's cleanup undoes what that test set
+      // up, such as power, which the caller's cleanup may still need); within one level, last registered first.
+      ctx.cleanups.sort((a, b) => a.depth - b.depth || b.seq - a.seq);
+      for (const c of ctx.cleanups) {
         try { await execBlock(c.nodes, ctx, c.vars); } catch (e) { log('error', 'Cleanup: ' + e.message); if (verdict === 'pass') { verdict = 'error'; note = 'Cleanup: ' + e.message; } }
       }
       S.inCleanup = false;
@@ -852,10 +856,12 @@ suite Main PCBA
       '<span class="tb-time">' + (r && r.ms ? fmtQty(r.ms / 1000, 's') : '') + '</span>' +
       '<button class="btn btn-plain tb-run1" data-act="run" data-idx="' + t.idx + '"' + (S.running ? ' disabled' : '') + ' title="Run this test">▶</button></div>';
     if (open) {
+      const endForm = S.form && S.form.mode !== 'edit' && S.form.after == null && S.form.test === t.idx;
       h += '<div class="tb-steps">' + t.children.map((c) => stepHtml(c, 0)).join('') +
+        (endForm ? '<div class="tb-sform-wrap" style="--d:0">' + formHtml() + '</div>' : '') +
         '<div class="tb-addrow"><select class="tb-select" data-act="add-step" data-idx="' + t.idx + '"' + (S.running ? ' disabled' : '') + '><option value="">+ Add step…</option>' +
-        Object.keys(TEMPLATES).map((k) => '<option value="' + k + '">' + KIND_LABEL[k] + '</option>').join('') + '</select>' +
-        '<span class="tb-dim">Each row is one line of the script. Edit a row and the text follows.</span></div></div>';
+        FORM_KINDS.map((k) => '<option value="' + k + '">' + KIND_LABEL[k] + '</option>').join('') + '</select>' +
+        '<span class="tb-dim">Click a step’s kind for a form. Drag ⠿ to move, or Alt+↑ and Alt+↓.</span></div></div>';
     }
     return h + '</div>';
   }
@@ -866,29 +872,452 @@ suite Main PCBA
     const s = n.step, res = S.steps[n.idx], iss = S.issues[n.idx];
     const kind = s.kind;
     const cur = S.current === n.idx && S.running;
-    let h = '<div class="tb-step k-' + kind + (cur ? ' cur' : '') + '" style="--d:' + depth + '">' +
-      '<span class="tb-skind">' + esc(KIND_LABEL[kind] || kind) + '</span>' +
-      '<input class="tb-sedit" data-act="edit" data-idx="' + n.idx + '" value="' + esc(n.text) + '"' + (S.running ? ' readonly' : '') + '>' +
+    const editing = S.form && S.form.mode === 'edit' && S.form.idx === n.idx;
+    const dis = S.running ? ' disabled' : '';
+    const formable = kind !== 'bad' && kind !== 'cleanup';
+    let h = '<div class="tb-step k-' + kind + (cur ? ' cur' : '') + (editing ? ' editing' : '') + '" style="--d:' + depth + '" data-step="' + n.idx + '">' +
+      '<span class="tb-grip" title="Drag to move, or Alt+↑ and Alt+↓">⠿</span>' +
+      (formable ? '<button class="tb-skind" data-act="form" data-idx="' + n.idx + '" title="Edit with a form"' + dis + '>' + esc(KIND_LABEL[kind] || kind) + '</button>' : '<span class="tb-skind">' + esc(KIND_LABEL[kind] || kind) + '</span>') +
+      '<input class="tb-sedit" data-act="edit" data-idx="' + n.idx + '" value="' + esc(n.text) + '"' + (S.running ? ' readonly' : '') + ' title="The line itself; click the kind on the left for a form">' +
       '<span class="tb-sres">' + (res ? badge(res.verdict, true) + '<span class="tb-sval">' + esc(res.list.length > 1 ? res.list.map((x) => x.value || VERDICT[x.verdict][1]).join(' · ') : (res.value || '')) + '</span>' + (res.limit ? '<span class="tb-slim">' + esc(res.limit) + '</span>' : '') + (res.note ? '<span class="tb-snote">' + esc(res.note) + '</span>' : '') : '') + '</span>' +
-      '<button class="tb-x" data-act="del" data-idx="' + n.idx + '" title="Delete this step"' + (S.running ? ' disabled' : '') + '>×</button></div>';
+      '<span class="tb-sacts">' +
+      (formable ? '<button class="tb-sbtn" data-act="form" data-idx="' + n.idx + '" title="Edit with a form"' + dis + '>✎</button>' : '<span></span>') +
+      '<button class="tb-sbtn" data-act="ins" data-idx="' + n.idx + '" title="Insert a step below"' + dis + '>+</button>' +
+      '<button class="tb-x" data-act="del" data-idx="' + n.idx + '" title="Delete this step"' + dis + '>×</button></span></div>';
     if (iss) h += '<div class="tb-step-issue" style="--d:' + depth + '">✕ ' + esc(iss.join('; ')) + '</div>';
-    if (kind === 'script') {
+    if (editing) h += '<div class="tb-sform-wrap" style="--d:' + depth + '">' + formHtml() + '</div>';
+    if (kind === 'script' && !editing) {
       h += '<pre class="tb-sbody" style="--d:' + (depth + 1) + '"><span class="tb-py-label">Python</span>' + esc(n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n')) + '</pre>';
     }
     h += n.children.map((c) => stepHtml(c, depth + 1)).join('');
+    if (S.form && S.form.mode !== 'edit' && S.form.after === n.idx) h += '<div class="tb-sform-wrap" style="--d:' + depth + '">' + formHtml() + '</div>';
     return h;
   }
 
-  const TEMPLATES = {
-    command: 'PSU.set_voltage 12 V', wait: 'wait 100 ms', until: 'wait until MAIN.state == "RUN" within 5 s', check: 'check MAIN.rail_3v3 3.3 V ±3%',
-    measure: 'measure MAIN.temp as temp', ask: 'ask "Is the LED green?"', tell: 'tell "Press the button now"', log: 'log "Note"',
-    call: 'call PWR-01', repeat: 'repeat 3', for: 'for n in 1, 2', script: 'script', cleanup: 'cleanup'
-  };
   function subtreeEnd(lines, idx) {
     const lead = lines[idx].lead; let j = idx + 1;
     while (j < lines.length && (!lines[j].text || lines[j].lead > lead)) j++;
     while (j > idx + 1 && !lines[j - 1].text) j--;
     return j;
+  }
+
+  /* ---------- Step forms: write a step by picking, without knowing the syntax ---------- */
+
+  // A form reads its step's line, offers only what the bench has (targets, commands, telemetry, units), and writes
+  // the line back. The text stays the source: a form is another way to type it.
+  const UNIT_CHOICES = { V: ['µV', 'mV', 'V'], A: ['µA', 'mA', 'A'], Hz: ['Hz', 'kHz', 'MHz'], s: ['ms', 's'], W: ['mW', 'W'], 'Ω': ['Ω', 'kΩ', 'MΩ'], '°C': ['°C'], '%': ['%'], baud: ['baud'] };
+  const ANY_UNITS = ['', 'V', 'mV', 'µV', 'A', 'mA', 'µA', 'Hz', 'kHz', 'MHz', 's', 'ms', 'W', 'mW', '°C', '%'];
+  const unitOpts = (base) => (base == null ? ANY_UNITS : UNIT_CHOICES[base] || [base]);
+  const FORM_KINDS = ['command', 'check', 'until', 'wait', 'measure', 'ask', 'tell', 'log', 'call', 'repeat', 'for', 'script', 'cleanup'];
+  const KIND_HELP = {
+    command: 'Sends a command to a target. Values outside a parameter’s range are refused before anything is sent. When the command returns something (a measurement, a capture), Save the result as keeps it under a name for later checks; in the text that’s written -> name.',
+    check: 'Reads a value and compares it with a limit. A failed check marks the test failed and the test carries on.',
+    until: 'Reads the value every 100 ms until the condition holds. If the time runs out, the test fails and stops.',
+    wait: 'Pauses the test.',
+    measure: 'Reads a value and keeps it under a name, with no limit, for a later check or the report.',
+    ask: 'Asks the operator a yes or no question. No fails the test.',
+    tell: 'Shows the operator a message and waits for OK.',
+    log: 'Writes a note in the log.',
+    call: 'Runs another test’s steps here. Its cleanup runs when this test ends.',
+    repeat: 'Repeats the steps indented under it. $i is the count, 1 first.',
+    for: 'Runs the steps indented under it once per item, with $name replaced by the item.',
+    script: 'Python, for loops, searches, and math. cmd(), tlm(), wait(), log(), and record() reach the bench; record() keeps a value for a later check.',
+    cleanup: 'The steps indented under it always run when the test ends, even after a failure or Abort.'
+  };
+
+  function pointList() {
+    const out = [];
+    Object.values(S.defs.targets).forEach((t) => t.order.forEach((k) => out.push({ ref: t.name + '.' + k, unit: t.telemetry[k].unit })));
+    return out;
+  }
+  // Names steps record (-> name, measure … as name, record() in Python), with their unit when it can be told.
+  function varList() {
+    const out = new Map();
+    S.tree.nodes.forEach((n) => {
+      if (n.kind !== 'step') return;
+      const s = n.step;
+      if (s.kind === 'command' && s.into) {
+        const c = S.defs.targets[s.target] && S.defs.targets[s.target].commands[s.cmd];
+        out.set(s.into, c && c.returns === 'text' ? '' : s.target === 'SCOPE' && s.cmd === 'measure' ? ({ vpp: 'V', mean: 'V', freq: 'Hz', duty: '%' }[s.args[1]] || null) : null);
+      }
+      if (s.kind === 'measure') out.set(s.as, pointUnit(s.ref));
+      if (s.kind === 'script') n.body.forEach((i) => { const m = /record\(\s*['"](\w+)['"]\s*,[^,)]*(?:,\s*['"]([^'"]*)['"])?/.exec(S.tree.lines[i].text); if (m) out.set(m[1], m[2] != null ? m[2] : null); });
+    });
+    return out;
+  }
+  function pointUnit(ref) { const [tn, k] = ref.split('.'); const t = S.defs.targets[tn]; return t && t.telemetry[k] ? t.telemetry[k].unit : null; }
+  function refUnit(ref) { if (ref.includes('.')) return pointUnit(ref); const u = varList().get(ref); return u === undefined ? null : u; }
+  function qtyParts(v, base) {
+    if (typeof v !== 'number' || !isFinite(v)) return { num: '', unit: base || '' };
+    const s = fmtQty(v, base || ''); const i = s.lastIndexOf(' ');
+    return i < 0 ? { num: s, unit: '' } : { num: s.slice(0, i), unit: s.slice(i + 1) };
+  }
+  function qtyText(num, unit) { num = String(num == null ? '' : num).trim(); return num === '' ? '' : num + (unit ? ' ' + unit : ''); }
+  const unq = (s) => String(s == null ? '' : s).replace(/"/g, '”');
+
+  function formValues(kind, n) {
+    const text = n ? n.text : '', s = text ? parseStep(text) : { kind }, v = { kind };
+    const pts = pointList();
+    if (kind === 'command') {
+      v.target = s.target || Object.keys(S.defs.targets)[0] || '';
+      const t = S.defs.targets[v.target];
+      v.cmd = s.cmd || (t ? Object.keys(t.commands)[0] : '');
+      v.args = s.args ? s.args.slice() : null; v.into = s.into || '';
+    }
+    if (kind === 'check' || kind === 'until') {
+      v.ref = s.ref || (kind === 'until' ? (pts.find((p) => p.unit === '') || pts[0] || {}).ref : (pts.find((p) => p.unit) || pts[0] || {}).ref) || '';
+      const c = s.cond, u = refUnit(v.ref);
+      const a = (x) => qtyParts(x, c && c.unit ? c.unit : u);
+      if (!c) v.op = u === '' ? 'is' : 'range';
+      else if (c.op === 'contains') { v.op = 'contains'; v.text = c.a; }
+      else if (c.str) { v.op = 'is'; v.text = c.a; }
+      else if (c.op === 'range' && c.nom != null) {
+        v.op = 'tol'; const p = a(c.nom); v.a = p.num; v.au = p.unit;
+        const pm = /(?:±|\+\/-|\+-)\s*([\d.]+)\s*%/.exec(text);
+        if (pm) { v.tol = pm[1]; v.tolu = '%'; } else { const q = a(c.b - c.nom); v.tol = q.num; v.tolu = q.unit; }
+      } else if (c.op === 'range') { const p = a(c.a), q = a(c.b); v.op = 'range'; v.a = p.num; v.au = p.unit; v.b = q.num; v.bu = q.unit; }
+      else { v.op = c.op; const p = a(c.a); v.a = p.num; v.au = p.unit; }
+      if (kind === 'until') { const q = qtyParts(s.timeout != null ? s.timeout : 5, 's'); v.t = q.num; v.tu = q.unit; }
+    }
+    if (kind === 'wait') { const q = qtyParts(s.sec != null ? s.sec : 0.1, 's'); v.t = q.num; v.tu = q.unit; }
+    if (kind === 'measure') { v.ref = s.ref || (pts[0] || {}).ref || ''; v.as = s.as || ''; }
+    if (kind === 'ask' || kind === 'tell' || kind === 'log') v.msg = s.msg || '';
+    if (kind === 'call') v.id = s.id || '';
+    if (kind === 'repeat') v.n = s.n || 3;
+    if (kind === 'for') { v.var = s.v || 'n'; v.items = s.items ? s.items.join(', ') : '1, 2'; }
+    if (kind === 'script') v.body = n ? n.body.map((i) => ' '.repeat(Math.max(0, S.tree.lines[i].lead - n.lead - 2)) + S.tree.lines[i].text).join('\n') : "# cmd(), tlm(), wait(), log(), and record() reach the bench\nlog('Hello from Python')";
+    return v;
+  }
+
+  function fSel(name, opts, cur, cls) { return '<select class="tb-select' + (cls ? ' ' + cls : '') + '" data-f="' + name + '">' + opts.map((o) => { const [val, lab, grp] = Array.isArray(o) ? o : [o, o]; return grp === 'group' ? '<optgroup label="' + esc(lab) + '">' : grp === 'end' ? '</optgroup>' : '<option value="' + esc(val) + '"' + (String(val) === String(cur) ? ' selected' : '') + '>' + esc(lab) + '</option>'; }).join('') + '</select>'; }
+  function fIn(name, val, ph, cls) { return '<input class="tb-pin' + (cls ? ' ' + cls : '') + '" data-f="' + name + '" value="' + esc(val == null ? '' : val) + '" placeholder="' + esc(ph || '') + '" autocomplete="off">'; }
+  function fUnit(name, base, cur) {
+    const o = unitOpts(base);
+    if (o.length === 1 && !o[0]) return '';
+    return fSel(name, o.map((u) => [u, u || '(none)']), o.includes(cur) ? cur : o.includes(base) ? base : o[0]);
+  }
+  function fRow(label, inner, note) { return '<div class="tb-ff"><span class="tb-ffl">' + label + '</span><span class="tb-ffv">' + inner + '</span>' + (note ? '<span class="tb-ffn">' + note + '</span>' : '') + '</div>'; }
+  function rangeNote(p) { return p.kind === 'choice' ? p.choices.join(', ') : p.kind === 'range' ? (isFinite(p.range[0]) ? p.range[0] : '') + ' to ' + (isFinite(p.range[1]) ? p.range[1] : '') + (p.unit ? ' ' + p.unit : '') : 'any text'; }
+
+  function subjectSel(name, cur, withVars) {
+    const pts = pointList(), vars = withVars ? [...varList().keys()] : [];
+    const opts = [['', 'Telemetry', 'group']].concat(pts.map((p) => [p.ref, p.ref + (p.unit ? ' (' + p.unit + ')' : '')])).concat([['', '', 'end']]);
+    if (vars.length) opts.push(['', 'Saved by earlier steps', 'group'], ...vars.map((x) => [x, x]), ['', '', 'end']);
+    if (cur && !pts.some((p) => p.ref === cur) && !vars.includes(cur)) opts.push([cur, cur + ' (not found)']);
+    return fSel(name, opts, cur);
+  }
+  function condFields(v) {
+    const u = refUnit(v.ref), text = u === '';
+    const ops = text ? [['is', 'is'], ['contains', 'contains']] : [['range', 'is between'], ['<=', 'is at most'], ['<', 'is below'], ['>=', 'is at least'], ['>', 'is above'], ['==', 'equals'], ['tol', 'is within ± of']];
+    if (!ops.some((o) => o[0] === v.op)) v.op = ops[0][0];
+    let h = fRow('Compare', fSel('op', ops, v.op), u ? 'Unit: ' + u + (UNIT_CHOICES[u] && UNIT_CHOICES[u].length > 1 ? ' (or ' + UNIT_CHOICES[u].filter((x) => x !== u).join(', ') + ')' : '') : u == null ? 'Unit not known: pick one, or none' : 'A text value');
+    if (v.op === 'is' || v.op === 'contains') h += fRow('Text', fIn('text', v.text, 'RUN'));
+    else if (v.op === 'range') h += fRow('From', fIn('a', v.a, '3.0', 'num') + fUnit('au', u, v.au)) + fRow('To', fIn('b', v.b, '3.6', 'num') + fUnit('bu', u, v.bu));
+    else if (v.op === 'tol') h += fRow('Nominal', fIn('a', v.a, '3.3', 'num') + fUnit('au', u, v.au)) + fRow('Tolerance ±', fIn('tol', v.tol, '3', 'num') + fSel('tolu', ['%'].concat(unitOpts(u).filter((x) => x)), v.tolu || '%'));
+    else h += fRow('Value', fIn('a', v.a, '50', 'num') + fUnit('au', u, v.au));
+    return h;
+  }
+
+  function formFields(v) {
+    const T = S.defs.targets;
+    if (v.kind === 'command') {
+      const t = T[v.target], c = t && t.commands[v.cmd];
+      let h = fRow('Target', fSel('target', Object.values(T).map((x) => [x.name, x.name + ' · ' + x.title]), v.target)) +
+        (t ? fRow('Command', fSel('cmd', Object.values(t.commands).map((x) => [x.name, x.name]), v.cmd), c && c.wire ? 'Sends: ' + esc(c.wire) : '') : '');
+      if (c) {
+        if (!v.args) v.args = c.params.map((p) => (p.kind === 'choice' ? p.choices[0] : p.kind === 'range' ? qtyText(isFinite(p.range[0]) ? p.range[0] : 0, p.unit) : ''));
+        c.params.forEach((p, i) => {
+          const a = v.args[i] == null ? '' : v.args[i], q = parseQty(a);
+          let inner;
+          if (p.kind === 'choice' && (!a || p.choices.includes(a))) inner = fSel('a' + i, p.choices, a);
+          else if (p.kind === 'range' && (a === '' || q)) {
+            const parts = q ? qtyParts(q.v, p.unit || '') : { num: '', unit: p.unit };
+            inner = fIn('a' + i, parts.num, '', 'num') + fUnit('u' + i, p.unit || '', parts.unit);
+          } else inner = fIn('a' + i, a, p.name, 'wide');
+          h += fRow(esc(p.name), inner, esc(rangeNote(p)));
+        });
+        if (c.returns) h += fRow('Save the result as', fIn('into', v.into, 'name, e.g. ' + (c.returns === 'text' ? 'banner' : 'reading')), 'Optional. Later steps can check it by this name');
+      }
+      return h;
+    }
+    if (v.kind === 'check') return fRow('Check', subjectSel('ref', v.ref, true)) + condFields(v);
+    if (v.kind === 'until') return fRow('Until', subjectSel('ref', v.ref, false)) + condFields(v) + fRow('Give up after', fIn('t', v.t, '5', 'num') + fSel('tu', ['ms', 's'], v.tu || 's'));
+    if (v.kind === 'wait') return fRow('Wait', fIn('t', v.t, '200', 'num') + fSel('tu', ['ms', 's'], v.tu || 'ms'));
+    if (v.kind === 'measure') return fRow('Read', subjectSel('ref', v.ref, false)) + fRow('Save as', fIn('as', v.as, 'board_temp'), 'Letters, digits, and _');
+    if (v.kind === 'ask' || v.kind === 'tell' || v.kind === 'log') return fRow(v.kind === 'ask' ? 'Question' : 'Message', fIn('msg', v.msg, v.kind === 'ask' ? 'Is the LED green?' : 'Press the button now', 'wide'));
+    if (v.kind === 'call') {
+      const ids = Object.values(S.tree.tests).filter((t) => !S.form || t.idx !== S.form.test).map((t) => [t.id, t.id + ' · ' + t.title]);
+      return fRow('Test', fSel('id', ids, v.id || (ids[0] || [])[0]));
+    }
+    if (v.kind === 'repeat') return fRow('Times', fIn('n', v.n, '3', 'num'));
+    if (v.kind === 'for') return fRow('Name', fIn('var', v.var, 'n'), 'Write $' + esc(v.var || 'n') + ' in the steps under it') + fRow('Items', fIn('items', v.items, '1, 2, 3', 'wide'), 'Separated by commas');
+    if (v.kind === 'script') return '<textarea class="tb-code tb-sform-py" data-f="body" spellcheck="false" wrap="off">' + esc(v.body) + '</textarea>';
+    return '';
+  }
+
+  function stepLine(v) {
+    const T = S.defs.targets;
+    const cond = () => {
+      if (v.op === 'is') return '== "' + unq(v.text) + '"';
+      if (v.op === 'contains') return 'contains "' + unq(v.text) + '"';
+      if (v.op === 'range') return qtyText(v.a, v.au) + ' .. ' + qtyText(v.b, v.bu);
+      if (v.op === 'tol') return qtyText(v.a, v.au) + ' ± ' + (v.tolu === '%' ? String(v.tol).trim() + '%' : qtyText(v.tol, v.tolu));
+      return v.op + ' ' + qtyText(v.a, v.au);
+    };
+    switch (v.kind) {
+      case 'command': {
+        const t = T[v.target], c = t && t.commands[v.cmd];
+        if (!c) return '';
+        const args = c.params.map((p, i) => { const a = String(v.args && v.args[i] != null ? v.args[i] : '').trim(); return v['u' + i] !== undefined && p.kind === 'range' && /^[-+]?[\d.]+$/.test(a) ? qtyText(a, v['u' + i]) : /\s/.test(a) && !parseQty(a) ? '"' + unq(a) + '"' : a; });
+        return v.target + '.' + v.cmd + (args.length ? ' ' + args.join(' ') : '') + (c.returns && v.into ? ' -> ' + String(v.into).trim().replace(/\W+/g, '_') : '');
+      }
+      case 'check': return 'check ' + v.ref + ' ' + cond();
+      case 'until': return 'wait until ' + v.ref + ' ' + cond() + ' within ' + qtyText(v.t, v.tu);
+      case 'wait': return 'wait ' + qtyText(v.t, v.tu);
+      case 'measure': return 'measure ' + v.ref + ' as ' + (String(v.as || '').trim().replace(/\W+/g, '_') || 'value');
+      case 'ask': case 'tell': case 'log': return v.kind + ' "' + unq(v.msg) + '"';
+      case 'call': return 'call ' + v.id;
+      case 'repeat': return 'repeat ' + (parseInt(v.n, 10) || 1);
+      case 'for': return 'for ' + (String(v.var || 'n').trim().replace(/\W+/g, '_')) + ' in ' + String(v.items || '').split(',').map((x) => x.trim()).filter(Boolean).join(', ');
+      case 'script': return 'script';
+      case 'cleanup': return 'cleanup';
+    }
+    return '';
+  }
+
+  function formHtml() {
+    const f = S.form, v = f.v;
+    if (f.mode === 'pick') {
+      return '<div class="tb-sform tb-spick" data-form><span class="tb-ffl">Insert</span>' +
+        FORM_KINDS.map((k) => '<button class="tb-chipbtn" data-act="pick-kind" data-kind="' + k + '">' + esc(KIND_LABEL[k]) + '</button>').join('') +
+        '<button class="btn btn-plain" data-act="form-cancel">Cancel</button></div>';
+    }
+    const line = stepLine(v), ps = line ? parseStep(line) : null;
+    return '<div class="tb-sform" data-form>' +
+      '<div class="tb-sform-head"><span class="tb-kind">' + (f.mode === 'edit' ? 'Edit' : 'New') + '</span><b>' + esc(KIND_LABEL[v.kind]) + '</b>' +
+      (f.mode === 'edit' ? '' : fSel('kind', FORM_KINDS.map((k) => [k, KIND_LABEL[k]]), v.kind, 'tb-sform-kind')) + '</div>' +
+      '<p class="tb-sform-help">' + esc(KIND_HELP[v.kind] || '') + '</p>' +
+      formFields(v) +
+      '<div class="tb-sform-prev"><span class="tb-ffl">Line</span><code id="form-line">' + esc(line) + '</code>' + (ps && ps.kind === 'bad' ? '<span class="tb-lintmark">✕ incomplete</span>' : '') + '</div>' +
+      '<div class="tb-sform-acts"><button class="btn btn-primary" data-act="form-save">' + (f.mode === 'edit' ? 'Save' : 'Add step') + '</button><button class="btn" data-act="form-cancel">Cancel</button></div></div>';
+  }
+
+  function readForm(el) {
+    const v = S.form.v;
+    el.querySelectorAll('[data-f]').forEach((x) => {
+      const k = x.dataset.f;
+      if (/^a\d+$/.test(k)) { (v.args = v.args || [])[+k.slice(1)] = x.value; } else v[k] = x.value;
+    });
+    return v;
+  }
+  function bodyLines(text, lead) {
+    const out = String(text || '').replace(/\r/g, '').split('\n').map((l) => { const t = l.replace(/\s+$/, ''); return t ? { lead: lead + 2 + (t.length - t.trimStart().length), text: t.trimStart() } : { lead: 0, text: '' }; });
+    while (out.length && !out[out.length - 1].text) out.pop();
+    return out.length ? out : [{ lead: lead + 2, text: 'pass' }];
+  }
+  function insertPoint(f) {
+    const lines = S.tree.lines;
+    if (f.after != null) return { at: subtreeEnd(lines, f.after), lead: lines[f.after].lead };
+    const test = S.tree.nodes.find((x) => x.idx === f.test);
+    const cl = test.children.find((c) => c.kind === 'step' && c.step.kind === 'cleanup');
+    return { at: f.v.kind === 'cleanup' || !cl ? subtreeEnd(lines, f.test) : cl.idx, lead: test.lead + 2 };
+  }
+  function saveForm() {
+    const f = S.form, v = f.v, line = stepLine(v);
+    if (!line) return;
+    const lines = S.tree.lines.slice();
+    if (f.mode === 'edit') {
+      const n = S.tree.nodes.find((x) => x.idx === f.idx);
+      const end = n.step.kind === 'script' && n.body.length ? n.body[n.body.length - 1] + 1 : f.idx + 1;
+      const repl = [{ lead: n.lead, text: line }].concat(v.kind === 'script' ? bodyLines(v.body, n.lead) : []);
+      lines.splice(f.idx, end - f.idx, ...repl);
+    } else {
+      const { at, lead } = insertPoint(f);
+      const add = [{ lead, text: line }];
+      if (v.kind === 'script') add.push(...bodyLines(v.body, lead));
+      if (v.kind === 'repeat' || v.kind === 'for') add.push({ lead: lead + 2, text: 'log "Steps to repeat go here"' });
+      if (v.kind === 'cleanup') add.push({ lead: lead + 2, text: 'log "Steps that always run go here"' });
+      lines.splice(at, 0, ...add);
+    }
+    S.form = null; setLines(lines);
+  }
+  function openForm(mode, opts) {
+    if (S.running) return;
+    if (mode === 'edit') {
+      const n = S.tree.nodes.find((x) => x.idx === opts.idx);
+      if (!n || n.step.kind === 'bad' || n.step.kind === 'cleanup') return;
+      S.form = { mode, idx: n.idx, test: testOf(n).idx, v: formValues(n.step.kind, n) };
+    } else if (mode === 'pick') S.form = { mode, test: opts.test, after: opts.after, v: {} };
+    else S.form = { mode: 'new', test: opts.test, after: opts.after, v: formValues(opts.kind) };
+    renderRows();
+    const el = $('#rows [data-form]'); if (el) { el.scrollIntoView({ block: 'nearest' }); const first = el.querySelector('input, select, textarea'); if (first && mode !== 'pick') first.focus(); }
+  }
+  function testOf(n) { while (n && n.kind !== 'test') n = n.parent; return n; }
+
+  // Moving a step moves its whole block (a cleanup or repeat takes its steps), re-indented to its new place.
+  function moveStep(from, to, where) {
+    const lines = S.tree.lines.slice(), fEnd = subtreeEnd(lines, from);
+    if (to >= from && to < fEnd) return null;
+    const delta = lines[to].lead - lines[from].lead;
+    const block = lines.slice(from, fEnd).map((l) => (l.text ? { lead: l.lead + delta, text: l.text } : l));
+    let at = where === 'after' ? subtreeEnd(lines, to) : to;
+    lines.splice(from, fEnd - from);
+    if (at > from) at -= fEnd - from;
+    lines.splice(at, 0, ...block);
+    S.steps = {}; S.form = null; setLines(lines);
+    return at;
+  }
+  function moveBy(idx, dir) {
+    const n = S.tree.nodes.find((x) => x.idx === idx); if (!n) return;
+    const sib = n.parent.children.filter((c) => c.kind === 'step');
+    const k = sib.indexOf(n), o = sib[k + dir];
+    if (!o) return;
+    const at = moveStep(idx, o.idx, dir < 0 ? 'before' : 'after');
+    if (at != null) requestAnimationFrame(() => { const el = $('#rows .tb-sedit[data-idx="' + at + '"]'); if (el) el.focus(); });
+  }
+
+  /* ---------- Script view: suggestions and hints as you type ---------- */
+
+  // Suggestions come from the bench (targets, commands, telemetry, units) and the file (tests, saved names).
+  // Up and Down pick, Enter or Tab takes one, Esc closes, Ctrl+Space asks.
+  const KEYWORDS = [
+    ['check ', 'compare a value with a limit'], ['wait ', 'pause: wait 200 ms'], ['wait until ', 'wait for a condition … within 5 s'],
+    ['measure ', 'keep a value: measure T.point as name'], ['ask "', 'yes or no question for the operator'], ['tell "', 'a message the operator acknowledges'],
+    ['log "', 'a note in the log'], ['call ', 'run another test’s steps'], ['repeat ', 'repeat the steps under it'], ['for ', 'for n in 1, 2 (then $n)'],
+    ['script', 'Python, indented under it'], ['cleanup', 'steps under it always run'], ['test ', 'test ID Title [REQ-…]'], ['group ', 'a group of tests'], ['suite ', 'a suite of groups']
+  ];
+  const AC = { items: [], hint: '', sel: 0, from: 0, to: 0, open: false };
+  function cmdSig(c) { return c.params.map((p) => p.name + ' ' + (p.kind === 'choice' ? p.choices.join('|') : p.kind === 'range' ? rangeNote(p) : 'text')).join(', '); }
+  function condHint(ref) {
+    const u = refUnit(ref);
+    if (u === '') return 'Then == "TEXT" or contains "TEXT"';
+    const unit = u || 'V', alt = (UNIT_CHOICES[unit] || [unit]).join(', ');
+    return 'Then a limit: 3.0 ' + unit + ' .. 3.6 ' + unit + '  ·  < 50 ' + (unit === 'V' ? 'mV' : unit) + '  ·  >= 1 ' + unit + '  ·  3.3 ' + unit + ' ± 3% (type +/- for ±)  ·  units ' + alt + (u == null ? ' (unit not known)' : '');
+  }
+  function acCompute(ta) {
+    const pos = ta.selectionStart; if (pos !== ta.selectionEnd) return null;
+    const val = ta.value, ls = val.lastIndexOf('\n', pos - 1) + 1, before = val.slice(ls, pos);
+    const lineNo = val.slice(0, ls).split('\n').length - 1, T = S.defs.targets, tree = parseScript(val);
+    const inPy = tree.nodes.some((n) => n.kind === 'step' && n.step.kind === 'script' && (n.body.includes(lineNo) || (lineNo > n.idx && n.body.length && lineNo < n.body[n.body.length - 1])));
+    const res = { items: [], hint: '', from: pos, to: pos, lineNo, col: before.length };
+    const take = (part, list) => { const p = part.toLowerCase(); res.from = pos - part.length; res.items = list.filter((x) => x.label.toLowerCase().startsWith(p) && x.label !== part).slice(0, 40); };
+    let m;
+    if (inPy) {
+      if ((m = /\b(cmd|tlm)\(\s*['"]([\w.]*)$/.exec(before))) {
+        const list = [];
+        Object.values(T).forEach((t) => { if (m[1] === 'cmd') Object.values(t.commands).forEach((c) => list.push({ label: t.name + '.' + c.name, insert: t.name + '.' + c.name, detail: cmdSig(c) })); else t.order.forEach((k) => list.push({ label: t.name + '.' + k, insert: t.name + '.' + k, detail: t.telemetry[k].unit || 'text' })); });
+        take(m[2], list);
+      } else if ((m = /\b(cmd)\(\s*['"]([A-Z][A-Z0-9_]*)\.(\w+)['"]\s*,[^)]*$/.exec(before)) && T[m[2]] && T[m[2]].commands[m[3]]) res.hint = m[2] + '.' + m[3] + ': ' + cmdSig(T[m[2]].commands[m[3]]) + ', each as a string, e.g. \'24 V\'';
+      else if (/\bwait\($/.test(before)) res.hint = 'Milliseconds: wait(150)';
+      return res.items.length || res.hint ? res : null;
+    }
+    if ((m = /^(\s*)([A-Za-z_]*)$/.exec(before)) && (m[2] || ta.dataset.ask)) {
+      take(m[2], KEYWORDS.map(([k, d]) => ({ label: k.trim(), insert: k, detail: d })).concat(Object.values(T).map((t) => ({ label: t.name, insert: t.name + '.', detail: t.title, more: true }))));
+    } else if ((m = /([A-Z][A-Z0-9_]*)\.(\w*)$/.exec(before)) && T[m[1]]) {
+      const t = T[m[1]], read = /^\s*(check|wait until|measure)\s/.test(before);
+      const list = read ? t.order.map((k) => ({ label: k, insert: k + ' ', detail: (t.telemetry[k].unit || 'text') + (limText(t.telemetry[k]) ? ' · ' + limText(t.telemetry[k]) : ''), more: true }))
+        : Object.values(t.commands).map((c) => ({ label: c.name, insert: c.name + (c.params.length ? ' ' : ''), detail: cmdSig(c) || 'no parameters', more: true }));
+      take(m[2], list);
+    } else if ((m = /^\s*call\s+(\S*)$/.exec(before))) {
+      take(m[1], Object.values(tree.tests).map((t) => ({ label: t.id, insert: t.id, detail: t.title })));
+    } else if ((m = /^\s*(check|wait until)\s+(\S*)$/.exec(before))) {
+      const vars = [...varList().keys()].map((x) => ({ label: x, insert: x + ' ', detail: 'saved by an earlier step', more: true }));
+      take(m[2], (m[1] === 'check' ? vars : []).concat(Object.values(T).map((t) => ({ label: t.name, insert: t.name + '.', detail: t.title, more: true }))));
+    } else if ((m = /^\s*measure\s+(\S*)$/.exec(before))) {
+      take(m[1], Object.values(T).map((t) => ({ label: t.name, insert: t.name + '.', detail: t.title, more: true })));
+    } else if ((m = /^\s*([A-Z][A-Z0-9_]*)\.(\w+)\s+(.*)$/.exec(before)) && T[m[1]] && T[m[1]].commands[m[2]]) {
+      const c = T[m[1]].commands[m[2]], given = (m[3].match(/"[^"]*"|\S+/g) || []).length;
+      const p = c.params[Math.min(given - (/\s$/.test(m[3]) || !m[3] ? 0 : 1), c.params.length - 1)];
+      if (p && p.kind === 'choice' && /\s$|^$/.test(m[3])) { res.items = p.choices.map((x) => ({ label: x, insert: x + ' ', detail: p.name })); }
+      res.hint = m[1] + '.' + m[2] + ' ' + c.params.map((q) => q === p ? '[' + q.name + ']' : q.name).join(' ') + (p ? '  ·  ' + p.name + ': ' + rangeNote(p) : '') + (c.returns ? '  ·  end with -> name to keep the result' : '');
+    } else if ((m = /^\s*(check|wait until)\s+(\S+)\s+(.*)$/.exec(before))) {
+      const done = m[1] === 'check' ? parseCond(m[3]) : /\swithin\s+\S+\s*\S*$/.test(m[3]) && parseStep(before.trim()).timeout != null;
+      if (!done) res.hint = m[1] === 'wait until' && parseCond(m[3]) ? 'Then within 5 s (or 500 ms)' : condHint(m[2]) + (m[1] === 'wait until' ? '  ·  then within 5 s' : '');
+    } else if (/^\s*wait\s+\S*$/.test(before)) res.hint = 'A time: 200 ms or 2 s';
+    return res.items.length || res.hint ? res : null;
+  }
+  function acRender(ta) {
+    const box = $('#ac');
+    if (!AC.open) { box.hidden = true; return; }
+    const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight);
+    const ctx = acRender.ctx || (acRender.ctx = document.createElement('canvas').getContext('2d'));
+    ctx.font = cs.fontSize + ' ' + cs.fontFamily;
+    const cw = ctx.measureText('MMMMMMMMMM').width / 10;
+    box.innerHTML = AC.items.map((x, i) => '<div class="tb-ac-i' + (i === AC.sel ? ' on' : '') + '" data-i="' + i + '"><b>' + esc(x.label) + '</b><span>' + esc(x.detail || '') + '</span></div>').join('') +
+      (AC.hint ? '<div class="tb-ac-hint">' + esc(AC.hint) + '</div>' : '');
+    box.hidden = false;
+    const wrap = ta.parentElement.getBoundingClientRect();
+    let left = 15 + AC.col * cw - ta.scrollLeft, top = 13 + (AC.lineNo + 1) * lh - ta.scrollTop + 2;
+    left = Math.max(4, Math.min(left, wrap.width - box.offsetWidth - 4));
+    if (top + box.offsetHeight > wrap.height && top - lh - box.offsetHeight - 6 > 0) top = top - lh - box.offsetHeight - 6;
+    box.style.left = left + 'px'; box.style.top = top + 'px';
+    const on = box.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+  function acUpdate(ta) {
+    const r = acCompute(ta);
+    delete ta.dataset.ask;
+    if (!r) { AC.open = false; acRender(ta); return; }
+    Object.assign(AC, r, { open: true, sel: Math.min(AC.open ? AC.sel : 0, Math.max(0, r.items.length - 1)) });
+    acRender(ta);
+  }
+  function acAccept(ta, i) {
+    const x = AC.items[i]; if (!x) return;
+    ta.focus(); ta.setRangeText(x.insert, AC.from, AC.to, 'end');
+    ta.dispatchEvent(new Event('input'));
+    if (x.more) acUpdate(ta); else { AC.open = false; acRender(ta); acUpdate(ta); }
+  }
+  function bindAutocomplete() {
+    const ta = $('#script');
+    const box = document.createElement('div'); box.id = 'ac'; box.className = 'tb-ac'; box.hidden = true; ta.parentElement.appendChild(box);
+    ta.addEventListener('input', (e) => { if (e.isTrusted || e.inputType) acUpdate(ta); });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === ' ' && e.ctrlKey) { e.preventDefault(); ta.dataset.ask = '1'; acUpdate(ta); return; }
+      if (!AC.open) return;
+      if (e.key === 'Escape') { e.preventDefault(); AC.open = false; acRender(ta); return; }
+      if (!AC.items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); AC.sel = (AC.sel + 1) % AC.items.length; acRender(ta); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); AC.sel = (AC.sel - 1 + AC.items.length) % AC.items.length; acRender(ta); }
+      else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acAccept(ta, AC.sel); }
+    });
+    ta.addEventListener('click', () => { if (AC.open) acUpdate(ta); });
+    ta.addEventListener('scroll', () => { if (AC.open) acRender(ta); });
+    ta.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ta) { AC.open = false; acRender(ta); } }, 150));
+    box.addEventListener('mousedown', (e) => { const it = e.target.closest('[data-i]'); if (!it) return; e.preventDefault(); acAccept(ta, +it.dataset.i); });
+  }
+
+  /* ---------- Step reference (the side panel) ---------- */
+
+  function openReference() {
+    INSP.k = -1; AC.open = false; acRender($('#script'));
+    document.querySelectorAll('.tb-target.sel').forEach((el) => el.classList.remove('sel'));
+    const row = (k, ex, what) => '<tr><td><b>' + esc(KIND_LABEL[k] || k) + '</b></td><td><code>' + esc(ex) + '</code><div class="tb-dim">' + what + '</div></td></tr>';
+    const T = S.defs.targets;
+    $('#inspector').innerHTML =
+      '<div class="insp-head"><span class="insp-crumb">Tests › Step reference</span>' +
+      '<button class="icon-btn" data-act="insp-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg></button></div>' +
+      '<div class="insp-body tb-ref">' +
+      '<div class="insp-title">Writing steps</div>' +
+      '<p class="hint"><b>No need to memorize this</b>In Rows, click a step’s kind (or ✎) for a form, and + to insert one below. In Script, suggestions appear as you type; Ctrl+Space asks for them.</p>' +
+      '<table class="tb-ref-t"><tbody>' +
+      row('command', 'PSU.set_voltage 24 V', 'Target, a dot, the command, then its parameters. Add <code>-> name</code> to keep what it returns.') +
+      row('check', 'check MAIN.rail_3v3 3.3 V ± 3%', 'Limits: <code>3.0 V .. 3.6 V</code>, <code>&lt; 50 mV</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>== 1.4</code>, <code>== "RUN"</code>, <code>contains "OK"</code>, <code>3.3 V ± 3%</code>, <code>3.3 V ± 50 mV</code>. Type <code>+/-</code> for ±.') +
+      row('until', 'wait until MAIN.state == "RUN" within 5 s', 'The same limits, checked every 100 ms; fails when the time runs out.') +
+      row('wait', 'wait 200 ms', 'ms or s.') +
+      row('measure', 'measure MAIN.temp as board_temp', 'Keeps a value under a name, with no limit.') +
+      row('ask', 'ask "Is the LED green?"', 'Yes or No for the operator; No fails the test. <code>tell</code> and <code>log</code> work the same way.') +
+      row('call', 'call PWR-01', 'Runs that test’s steps here; its cleanup waits until this test ends.') +
+      row('repeat', 'repeat 3', 'Repeats the indented steps; <code>$i</code> is the count.') +
+      row('for', 'for n in 1, 2', 'Runs the indented steps once per item; write <code>$n</code> in them.') +
+      row('script', 'script', 'Python, indented under it. <code>cmd(\'PSU.set_voltage\', \'24 V\')</code>, <code>tlm(\'MAIN.state\')</code>, <code>wait(150)</code>, <code>log(\'…\')</code>, <code>record(\'name\', value, \'V\')</code>.') +
+      row('cleanup', 'cleanup', 'The indented steps always run when the test ends, even after a failure or Abort.') +
+      '</tbody></table>' +
+      '<h4>Units</h4><p class="tb-dim">V, mV, µV (or uV) · A, mA, µA · Hz, kHz, MHz · s, ms · W, mW · °C · %. A space goes between the number and the unit: <code>50 mV</code> is 0.05 V.</p>' +
+      '<h4>Layout</h4><p class="tb-dim"><code>suite</code>, then <code>group</code>, then <code>test ID Title [REQ-004]</code>, each indented two spaces under the last; steps two more under their test. <code>#</code> starts a comment.</p>' +
+      '<h4>On this bench</h4>' + Object.values(T).map((t) => '<div class="tb-ref-tg"><b>' + esc(t.name) + '</b> <span class="tb-dim">' + esc(t.title) + '</span>' +
+        (Object.keys(t.commands).length ? '<div><span class="tb-dim">Commands</span> ' + Object.values(t.commands).map((c) => '<code title="' + esc(cmdSig(c)) + '">' + esc(c.name) + '</code>').join(' ') + '</div>' : '') +
+        (t.order.length ? '<div><span class="tb-dim">Telemetry</span> ' + t.order.map((k) => '<code title="' + esc(t.telemetry[k].unit || 'text') + '">' + esc(k) + '</code>').join(' ') + '</div>' : '') + '</div>').join('') +
+      '</div>';
+    $('#inspector').classList.add('open');
   }
 
   /* ---------- Rendering: the rest ---------- */
@@ -1653,8 +2082,13 @@ suite Main PCBA
       if (act === 'run') { e.stopPropagation(); const n = S.tree.nodes.find((x) => x.idx === +a.dataset.idx); if (n) run(testsUnder(n)); }
       if (act === 'del') {
         const lines = S.tree.lines.slice(); const i = +a.dataset.idx;
-        lines.splice(i, subtreeEnd(lines, i) - i); setLines(lines);
+        lines.splice(i, subtreeEnd(lines, i) - i); S.form = null; setLines(lines);
       }
+      if (act === 'form') openForm('edit', { idx: +a.dataset.idx });
+      if (act === 'ins') { const n = S.tree.nodes.find((x) => x.idx === +a.dataset.idx); openForm('pick', { test: testOf(n).idx, after: n.idx }); }
+      if (act === 'pick-kind') openForm('new', { test: S.form.test, after: S.form.after, kind: a.dataset.kind });
+      if (act === 'form-cancel') { S.form = null; renderRows(); }
+      if (act === 'form-save') { readForm(a.closest('[data-form]')); saveForm(); }
       if (act === 'add-test') {
         const lines = S.tree.lines.slice(); const i = +a.dataset.idx; const end = subtreeEnd(lines, i);
         let k = 1; while (S.tree.tests['NEW-' + k]) k++;
@@ -1671,20 +2105,46 @@ suite Main PCBA
         if (!text) { lines.splice(i, subtreeEnd(lines, i) - i); } else lines[i] = { lead: lines[i].lead, text };
         setLines(lines);
       }
-      if (a.dataset.act === 'add-step' && a.value) {
-        const lines = S.tree.lines.slice(); const i = +a.dataset.idx;
-        const test = S.tree.nodes.find((x) => x.idx === i);
-        const cl = test.children.find((c) => c.kind === 'step' && c.step.kind === 'cleanup');
-        const at = a.value === 'cleanup' || !cl ? subtreeEnd(lines, i) : cl.idx;
-        const lead = lines[i].lead + 2;
-        const add = [{ lead, text: TEMPLATES[a.value] }];
-        if (a.value === 'repeat' || a.value === 'for') add.push({ lead: lead + 2, text: 'wait 100 ms' });
-        if (a.value === 'cleanup') add.push({ lead: lead + 2, text: 'PSU.output off' });
-        if (a.value === 'script') add.push({ lead: lead + 2, text: "log('Hello from Python')" });
-        lines.splice(at, 0, ...add); setLines(lines);
-      }
+      if (a.dataset.act === 'add-step' && a.value) openForm('new', { test: +a.dataset.idx, after: null, kind: a.value });
     });
-    rows.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('.tb-sedit')) e.target.blur(); });
+    // Form fields: a pick that changes what the form offers redraws it; anything else just updates the line.
+    const formInput = (e) => {
+      const el = e.target.closest('[data-form]'); if (!el || !e.target.dataset.f) return;
+      const k = e.target.dataset.f, v = S.form.v;
+      if (k === 'kind') { S.form.v = formValues(e.target.value); renderRows(); return; }
+      readForm(el);
+      if (k === 'target') { const t = S.defs.targets[v.target]; v.cmd = t ? Object.keys(t.commands)[0] : ''; v.args = null; Object.keys(v).forEach((x) => { if (/^u\d+$/.test(x)) delete v[x]; }); }
+      if (k === 'cmd') { v.args = null; Object.keys(v).forEach((x) => { if (/^u\d+$/.test(x)) delete v[x]; }); }
+      if (k === 'ref') { const u = refUnit(v.ref); ['au', 'bu', 'tolu'].forEach((x) => delete v[x]); if (u === '' && v.op !== 'contains') v.op = 'is'; if (u !== '' && (v.op === 'is' || v.op === 'contains')) v.op = 'range'; }
+      if (e.type === 'change' && ['target', 'cmd', 'ref', 'op'].includes(k)) { renderRows(); return; }
+      const line = stepLine(v); const out = el.querySelector('#form-line'); if (out) out.textContent = line;
+    };
+    rows.addEventListener('input', formInput);
+    rows.addEventListener('change', formInput);
+    rows.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.matches('.tb-sedit')) e.target.blur();
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target.matches('.tb-sedit')) { e.preventDefault(); e.target.blur(); moveBy(+e.target.dataset.idx, e.key === 'ArrowUp' ? -1 : 1); }
+      const form = e.target.closest('[data-form]');
+      if (form && e.key === 'Escape') { S.form = null; renderRows(); }
+      if (form && e.key === 'Enter' && !e.target.matches('textarea')) { e.preventDefault(); readForm(form); saveForm(); }
+    });
+    // Drag a step by its ⠿ grip onto another step of the same test: the top half drops before it, the bottom after.
+    let dragFrom = null;
+    rows.addEventListener('mousedown', (e) => { const g = e.target.closest('.tb-grip'); if (g && !S.running) g.closest('.tb-step').draggable = true; });
+    rows.addEventListener('mouseup', () => { if (dragFrom == null) document.querySelectorAll('.tb-step[draggable="true"]').forEach((x) => { x.draggable = false; }); });
+    rows.addEventListener('dragstart', (e) => { const st = e.target.closest && e.target.closest('.tb-step'); if (!st) return; dragFrom = +st.dataset.step; st.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', st.querySelector('.tb-sedit').value); });
+    const dropAt = (e) => {
+      const st = e.target.closest && e.target.closest('.tb-step'); if (!st || dragFrom == null) return null;
+      const to = +st.dataset.step; if (to === dragFrom) return null;
+      const a = S.tree.nodes.find((x) => x.idx === dragFrom), b = S.tree.nodes.find((x) => x.idx === to);
+      if (!a || !b || testOf(a) !== testOf(b)) return null;
+      const r = st.getBoundingClientRect();
+      return { st, to, where: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
+    };
+    const clearDrop = () => document.querySelectorAll('.tb-step.drop-before, .tb-step.drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+    rows.addEventListener('dragover', (e) => { const d = dropAt(e); clearDrop(); if (!d) return; e.preventDefault(); d.st.classList.add('drop-' + d.where); });
+    rows.addEventListener('drop', (e) => { const d = dropAt(e); clearDrop(); if (!d) return; e.preventDefault(); const from = dragFrom; dragFrom = null; moveStep(from, d.to, d.where); });
+    rows.addEventListener('dragend', () => { clearDrop(); document.querySelectorAll('.tb-step[draggable="true"]').forEach((x) => { x.draggable = false; x.classList.remove('dragging'); }); dragFrom = null; });
 
     const targets = $('#targets');
     targets.addEventListener('change', (e) => { if (e.target.dataset.act === 'pick-cmd') drawParams(e.target.closest('.tb-target')); });
@@ -1733,6 +2193,8 @@ suite Main PCBA
     bind();
     bindExplorer();
     bindInspector();
+    bindAutocomplete();
+    $('#ref-btn').addEventListener('click', openReference);
     setRate(X.rate);
     requestAnimationFrame(plotLoop);
     setInterval(tickBench, 250);

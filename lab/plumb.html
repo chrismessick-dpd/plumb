@@ -11,7 +11,7 @@
 <meta name="color-scheme" content="light dark">
 <title>Plumb lab</title>
 <link rel="stylesheet" href="../../signoff/assets/suite.css">
-<link rel="stylesheet" href="plumb.css?v=4">
+<link rel="stylesheet" href="plumb.css?v=6">
 </head>
 <body>
 <div class="app" id="app">
@@ -113,6 +113,7 @@
   <section class="tb-pane" data-pane="tests">
     <div class="tb-bar">
       <span class="seg" id="ctl-view"><button data-v="rows">Rows</button><button data-v="text">Script</button><button data-v="side">Side by side</button></span>
+      <button class="btn btn-plain" id="ref-btn" title="Every kind of step, with examples">Step reference</button>
       <span class="tb-summary" id="summary"></span>
       <span class="tb-rt" id="roundtrip"></span>
       <span class="tb-py st-off" id="py-state" title="Script steps are Python, run in the page by Pyodide. It loads the first time a script runs.">Python not loaded</span>
@@ -240,7 +241,7 @@
         <li><b>Where Pyodide comes from.</b> This lab loads it from the jsDelivr CDN inside the Worker. The suite's pages load nothing from outside, so the real tool would either host Pyodide's files itself (about 10 MB in the repo or a release) or allow that one CDN.</li>
         <li><b>The bridge's job:</b> only a pipe to instruments the page can't reach, or also the place a long or unattended run happens.</li>
         <li><b>A failed check:</b> in this lab a failed <code>check</code> marks the test failed and carries on, while a <code>wait until</code> timeout or an error stops it. pytest stops at the first failure.</li>
-        <li><b>Call and cleanup:</b> here a called test's cleanup waits until the calling test ends, so <code>call PWR-01</code> powers up and the supply goes off only at the very end.</li>      </ol>
+        <li><b>Call and cleanup:</b> here a called test's cleanup waits until the calling test ends, so <code>call PWR-01</code> powers up and the supply goes off only at the very end: the test's own cleanup runs first (relays off), then the called test's (supply off).</li>      </ol>
     </div>
   </section>
     </div>
@@ -257,6 +258,6 @@
   </div>
 </div>
 
-<script src="plumb.js?v=4"></script>
+<script src="plumb.js?v=8"></script>
 </body>
 </html>
