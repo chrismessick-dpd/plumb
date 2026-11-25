@@ -2261,7 +2261,8 @@ suite Main PCBA
     $('#tests-wrap').dataset.view = v;
   }
   function renderAttach() {
-    $('#ctl-attach').innerHTML = Object.keys(sim.attached).map((k) => '<button class="tb-chip tb-chip-btn' + (sim.attached[k] ? '' : ' off') + '" data-t="' + k + '" title="Simulated: attach or detach ' + k + '">' + (sim.attached[k] ? '✓ ' : '') + k + '</button>').join('');
+    // Only the open bench's targets; sim.attached keeps the rest, so switching back finds them as they were.
+    $('#ctl-attach').innerHTML = Object.keys((S.defs && S.defs.targets) || {}).map((k) => '<button class="tb-chip tb-chip-btn' + (sim.attached[k] ? '' : ' off') + '" data-t="' + k + '" title="Simulated: attach or detach ' + k + '">' + (sim.attached[k] ? '✓ ' : '') + k + '</button>').join('');
   }
 
   function bind() {
