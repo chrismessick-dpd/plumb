@@ -371,3 +371,21 @@ button.tb-skind:hover { background: var(--hair); text-decoration: underline; tex
 .tb-ref-t .tb-dim { margin-top: 3px; line-height: 1.45; }
 .tb-ref-tg { margin: 6px 0 10px; font-size: 12.5px; line-height: 1.7; }
 .tb-ref-tg code { display: inline-block; margin: 0 2px 2px 0; }
+
+/* ---------- Benches: the details and sync sheets, and the empty page ---------- */
+.tb-sheet { width: min(480px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
+.tb-sheet .tb-ff { display: grid; grid-template-columns: 9.5em 1fr; align-items: center; gap: 8px; }
+.tb-sheet .tb-pin, .tb-sheet .tb-select { width: 100%; }
+.tb-sheet-h { margin: 0; font-size: 15px; }
+.tb-sheet-note { margin: -4px 0 0 calc(9.5em + 8px); font-size: 12px; }
+.tb-sheet .tb-modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+.tb-sheet .tb-grow { flex: 1; }
+.tb-dry { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; }
+.tb-bad { color: var(--issue); }
+.tb-edit-bench { font-size: 12px; vertical-align: middle; }
+.tb-empty { display: flex; justify-content: center; padding-top: 10vh; }
+.tb-empty-card { max-width: 520px; padding: 22px 24px; }
+.tb-empty-card h2 { margin: 0 0 8px; }
+.tb-empty-btns { display: flex; gap: 8px; margin-top: 14px; }
+@media (max-width: 600px) { .tb-sheet .tb-ff { grid-template-columns: 1fr; } .tb-sheet-note { margin-left: 0; } }
+.tb-sheet p { font: inherit; margin: 0; }

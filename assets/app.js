@@ -497,7 +497,7 @@ suite Main PCBA
     view: 'side', open: new Set(['PWR-01']), results: {}, steps: {},
     running: false, abort: false, current: null, log: [], hist: {}
   };
-  try { const v = localStorage.getItem('plumb.lab.view'); if (v) S.view = v; } catch (e) { /* storage off */ }
+  try { const v = localStorage.getItem('plumb.v1.ui.view'); if (v) S.view = v; } catch (e) { /* storage off */ }
 
   function reparse(fromText) {
     if (fromText) S.form = null; // typed in the Script view: an open form's line may have moved
@@ -506,6 +506,7 @@ suite Main PCBA
     if (!fromText) $('#script').value = S.text;
     renderCodeBg(S.tree);
     renderRows(); renderLint(); renderRoundTrip(); renderEvidence(); renderSummary();
+    persist();
   }
   // Script view: a picture of the text behind the transparent text box, tinting each script step's Python lines and
   // labeling the step. Same font, padding, and scroll as the box, so the tints sit under their lines.
@@ -686,7 +687,7 @@ suite Main PCBA
   const PY = { w: null, state: 'off', handler: null };
   function pyWorker() {
     if (PY.w) return PY.w;
-    PY.w = new Worker('script-worker.js?v=4');
+    PY.w = new Worker('assets/script-worker.js?v=' + ((window.PLUMB || {}).VERSION || '4'));
     PY.state = 'loading'; renderPy();
     PY.w.onmessage = (e) => {
       const m = e.data;
@@ -1347,7 +1348,7 @@ suite Main PCBA
       const ts = reqs[q]; const rs = ts.map((t) => S.results[t.id]).filter(Boolean);
       const v = !rs.length ? null : rs.some((r) => r.verdict === 'fail' || r.verdict === 'error') ? 'fail' : rs.every((r) => r.verdict === 'pass') && rs.length === ts.length ? 'pass' : rs.some((r) => r.verdict === 'skip') ? 'skip' : null;
       return '<tr><td><span class="tb-req">' + esc(q) + '</span></td><td>' + ts.map((t) => esc(t.id)).join(', ') + '</td><td>' + badge(v) + '</td></tr>';
-    }).join('') + '</tbody></table><button class="btn" disabled title="Lab only">Send as evidence to Signoff EE…</button>' : '<p class="tb-dim">No test names a requirement. Add <code>[REQ-…]</code> to a test line.</p>';
+    }).join('') + '</tbody></table><button class="btn" disabled title="Comes with Send to Signoff EE">Send as evidence to Signoff EE…</button>' : '<p class="tb-dim">No test names a requirement. Add <code>[REQ-…]</code> to a test line.</p>';
   }
   let logRaf = 0;
   function renderLog() {
@@ -1564,9 +1565,9 @@ suite Main PCBA
     rings: {}, plotted: [], sel: null, win: 30, paused: false, pausedAt: 0, rate: 10, hover: null,
     marks: [], dirty: true, drawMs: 0, samples: 0, timer: 0, q: ''
   };
-  try { const p = JSON.parse(localStorage.getItem('plumb.lab.plot') || 'null'); if (p) { X.plotted = p.plotted || []; X.win = p.win || 30; } } catch (e) { /* storage off */ }
+  try { const p = JSON.parse(localStorage.getItem('plumb.v1.ui.plot') || 'null'); if (p) { X.plotted = p.plotted || []; X.win = p.win || 30; } } catch (e) { /* storage off */ }
   if (!X.plotted.length) X.plotted = ['PSU.current', 'MAIN.rail_3v3', 'MAIN.state'];
-  function savePlot() { try { localStorage.setItem('plumb.lab.plot', JSON.stringify({ plotted: X.plotted, win: X.win })); } catch (e) { /* storage off */ } }
+  function savePlot() { try { localStorage.setItem('plumb.v1.ui.plot', JSON.stringify({ plotted: X.plotted, win: X.win })); } catch (e) { /* storage off */ } }
 
   // The lab records every point. The real tool would poll only what's plotted, shown, or used by a running test:
   // the cost is the instruments' answers (a serial board, perhaps 50 queries a second), not the drawing.
@@ -1975,44 +1976,237 @@ suite Main PCBA
     setTimeout(() => el.remove(), 3200);
   }
 
-  /* ---------- The sidebar: benches by project ---------- */
+  /* ---------- Benches: Plumb projects, by client project ---------- */
 
-  // A bench is one station's targets and suites; benches group by the client project, as Signoff groups reviews.
-  // Only the Main PCBA bench is built in the lab.
-  const BENCHES = [
-    { project: 'Smart Thermostat', items: [
-      { id: 'main', name: 'Main PCBA bring-up', sub: 'PSU, scope, logic analyzer · 8 tests' },
-      { id: 'disp', name: 'Display & Sensor Board', sub: 'PSU, logic analyzer · 5 tests', pct: 60 },
-      { id: 'sys', name: 'Thermostat system test', sub: 'Main PCBA + display + wall unit · 12 tests', pct: 25 }
-    ] },
-    { project: 'Zone Controller', items: [
-      { id: 'zone', name: 'Controller board', sub: 'PSU, CAN adapter · 9 tests', pct: 100 }
-    ] }
-  ];
+  // A bench (a Plumb project) is one station's targets and tests, grouped by the client project as Signoff groups
+  // reviews, and linked to the Signoff EE board it tests. assets/store.js keeps them and syncs them with plumb_data.
+  const ST = window.PLUMB.store;
+  const DEMO = ST.DEMO;
+  let CUR = null;
+  const DEMO_ID = 'bdemo1';
+  const CUR_KEY = (DEMO ? 'plumb.demo.' : 'plumb.v1.') + 'ui.bench';
+  function persist() {
+    if (!CUR || !ST.get(CUR) || S.loading) return;
+    ST.update(CUR, { script: S.text, defs: S.defsText });
+    renderSyncPill();
+  }
+  function openProject(id) {
+    // A running test's cleanup reads the open bench's targets, so the bench can't change under it.
+    if (S.running && id !== CUR) { toast('A test is running: Abort it first, then switch benches'); renderSide(); return false; }
+    const p = id && ST.get(id);
+    CUR = p ? p.id : null;
+    try { localStorage.setItem(CUR_KEY, CUR || ''); } catch (e) { /* storage off */ }
+    $('#empty').hidden = !!p; $('.plumb-page').hidden = !p;
+    $('#run-all').disabled = !p || S.running;
+    if (!p) { renderEmpty(); renderSide(); renderHead(); return; }
+    S.loading = true;
+    S.defsText = p.bench.defs || ''; S.text = p.bench.script || '';
+    S.results = {}; S.steps = {}; S.form = null;
+    S.open = new Set(); const first = /^\s*test\s+(\S+)/m.exec(S.text); if (first) S.open.add(first[1]);
+    loadDefs(); reparse(false);
+    S.loading = false;
+    closeTarget();
+    renderHead(); renderSide();
+    if (!$('[data-pane="bench"]').hidden) { renderTargets(); tickBench(); }
+  }
+  function boardLink(b) {
+    if (!b) return '<span class="tb-dim">No Signoff EE board</span>';
+    const href = '../ee_design_review/index.html?project=' + encodeURIComponent(b.id) + (DEMO ? '&demo' : '');
+    return 'Tests <a href="' + href + '" title="Open this board in Signoff EE">' + esc(b.name) + ' in Signoff EE</a>';
+  }
+  function renderHead() {
+    const p = CUR && ST.get(CUR);
+    $('#toolbar-title').textContent = p ? p.meta.name : 'Plumb';
+    if (!p) return;
+    $('#bench-eyebrow').textContent = p.meta.project || 'No client project';
+    $('#bench-title').textContent = p.meta.name;
+    $('#bench-board').innerHTML = boardLink(p.meta.board);
+    document.title = p.meta.name + ' · Plumb';
+  }
+  function renderEmpty() {
+    const signed = !!ST.token();
+    $('#empty').innerHTML = '<div class="card tb-empty-card"><h2>No benches yet</h2>' +
+      '<p>A bench is one test station: its targets (the instruments and the board under test) and its tests. Link it to the Signoff EE board it tests.</p>' +
+      '<p class="tb-dim">' + (signed ? 'Benches sync with the private plumb_data repo.' : 'Benches are kept in this browser until you sign in to GitHub; then they sync with the private plumb_data repo.') + '</p>' +
+      '<div class="tb-empty-btns"><button class="btn btn-primary" data-act="new-bench">New bench</button>' +
+      '<a class="btn btn-plain" href="?demo">Try the demo</a></div></div>';
+  }
+  const closedGroups = new Set();
   function ringSvg(pct, size, stroke) {
     const r = (size - stroke) / 2, c = 2 * Math.PI * r, h = size / 2;
     return '<div class="ring" style="width:' + size + 'px;height:' + size + 'px"><svg width="' + size + '" height="' + size + '">' +
       '<circle class="ring-track" cx="' + h + '" cy="' + h + '" r="' + r + '" fill="none" stroke-width="' + stroke + '"/>' +
       '<circle class="ring-val" cx="' + h + '" cy="' + h + '" r="' + r + '" fill="none" stroke-width="' + stroke + '" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + c * (1 - pct / 100) + '"/></svg></div>';
   }
-  const closedGroups = new Set();
   function renderSide() {
     const q = ($('#bench-search').value || '').trim().toLowerCase();
-    const c = counts(S.tree.root);
-    const mainPct = c.total ? Math.round(100 * c.pass / c.total) : 0;
-    const html = BENCHES.map((g) => {
-      const items = g.items.filter((b) => !q || (g.project + ' ' + b.name + ' ' + b.sub).toLowerCase().includes(q));
-      if (!items.length) return '';
-      const open = q || !closedGroups.has(g.project) || items.some((b) => b.id === 'main');
-      return '<div class="side-group"><button class="side-group-head" data-group="' + esc(g.project) + '" aria-expanded="' + !!open + '">' +
+    const c = S.tree ? counts(S.tree.root) : { total: 0, pass: 0, fail: 0, error: 0 };
+    const groups = new Map();
+    ST.list().forEach((p) => {
+      const sm = ST.summarize(p);
+      if (q && !(p.meta.project + ' ' + p.meta.name + ' ' + (p.meta.board ? p.meta.board.name : '')).toLowerCase().includes(q)) return;
+      const g = p.meta.project || 'No client project';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push({ p, sm });
+    });
+    const html = [...groups.entries()].map(([g, items]) => {
+      const open = q || !closedGroups.has(g) || items.some((x) => x.p.id === CUR);
+      return '<div class="side-group"><button class="side-group-head" data-group="' + esc(g) + '" aria-expanded="' + !!open + '">' +
         '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-        '<span class="side-group-name">' + esc(g.project) + '</span><span class="side-group-count">' + g.items.length + '</span></button>' +
-        (open ? items.map((b) => '<button class="proj' + (b.id === 'main' ? ' active' : '') + '" data-bench="' + b.id + '" title="' + esc(b.name + '\n' + b.sub + (b.id === 'main' ? '\n' + c.pass + ' of ' + c.total + ' tests pass' : '\nLab: not built')) + '">' +
-          ringSvg(b.id === 'main' ? mainPct : b.pct, 26, 3.5) +
-          '<span class="proj-body"><span class="proj-name">' + esc(b.name) + '</span><span class="proj-sub">' + esc(b.id === 'main' ? (c.pass + ' of ' + c.total + ' pass · ' + Object.keys(S.defs.targets).length + ' targets') : b.sub) + '</span></span></button>').join('') : '') + '</div>';
+        '<span class="side-group-name">' + esc(g) + '</span><span class="side-group-count">' + items.length + '</span></button>' +
+        (open ? items.map(({ p, sm }) => {
+          const cur = p.id === CUR;
+          const pct = cur && c.total ? Math.round(100 * c.pass / c.total) : 0;
+          const sub = (cur && c.pass + c.fail + c.error ? c.pass + ' of ' + c.total + ' pass' : sm.tests + ' tests') + ' · ' + sm.targets + ' targets' + (ST.edited(p.id) && !DEMO ? ' · unsynced' : '');
+          return '<button class="proj' + (cur ? ' active' : '') + '" data-bench="' + p.id + '" title="' + esc(p.meta.name + '\n' + (p.meta.board ? 'Tests ' + p.meta.board.name + ' (Signoff EE)' : 'No Signoff EE board') + '\n' + sub) + '">' +
+            ringSvg(pct, 26, 3.5) +
+            '<span class="proj-body"><span class="proj-name">' + esc(p.meta.name) + '</span><span class="proj-sub">' + esc(sub) + '</span></span></button>';
+        }).join('') : '') + '</div>';
     }).join('');
-    $('#bench-list').innerHTML = html || '<div class="side-empty">No matching benches.</div>';
-    $('#bench-sub').textContent = Object.keys(S.defs.targets).length + ' targets · ' + c.total + ' tests' + (c.pass + c.fail + c.error ? ' · ' + c.pass + ' passed' + (c.fail + c.error ? ', ' + (c.fail + c.error) + ' failed' : '') : '');
+    $('#bench-list').innerHTML = html || '<div class="side-empty">' + (q ? 'No matching benches.' : 'No benches yet.') + '</div>';
+    if (CUR && S.tree) $('#bench-sub').textContent = Object.keys(S.defs.targets).length + ' targets · ' + c.total + ' tests' + (c.pass + c.fail + c.error ? ' · ' + c.pass + ' passed' + (c.fail + c.error ? ', ' + (c.fail + c.error) + ' failed' : '') : '');
+  }
+
+  /* ---------- Sheets: bench details, and sync ---------- */
+
+  function sheet(html) { $('#sheet-card').innerHTML = html; $('#sheet').hidden = false; const f = $('#sheet-card').querySelector('input, select'); if (f) f.focus(); }
+  function closeSheet() { $('#sheet').hidden = true; $('#sheet-card').innerHTML = ''; }
+  // New bench (id null) or a bench's details: name, client project, and the Signoff EE board it tests. The boards
+  // come from Signoff EE's working copy in this browser, as Fabcheck's Send lists them.
+  async function openBenchSheet(id) {
+    const p = id ? ST.get(id) : null;
+    const boards = await ST.loadBoards();
+    const cur = p && p.meta.board;
+    const known = cur && !boards.some((b) => b.id === cur.id) ? [{ id: cur.id, name: cur.name, project: '' }] : [];
+    const opts = '<option value="">No board</option>' + known.concat(boards).map((b) => '<option value="' + esc(b.id) + '"' + (cur && cur.id === b.id ? ' selected' : '') + '>' + esc((b.project ? b.project + ' · ' : '') + b.name) + '</option>').join('');
+    const projects = [...new Set(ST.list().map((x) => x.meta.project).concat(boards.map((b) => b.project)).filter(Boolean))].sort();
+    sheet('<div class="eyebrow">' + (p ? 'Bench details' : 'New bench') + '</div>' +
+      '<label class="tb-ff"><span class="tb-ffl">Name</span><input class="tb-pin" id="bs-name" value="' + esc(p ? p.meta.name : '') + '" placeholder="Main PCBA bring-up"></label>' +
+      '<label class="tb-ff"><span class="tb-ffl">Signoff EE board</span><select class="tb-select" id="bs-board">' + opts + '</select></label>' +
+      (boards.length ? '' : '<p class="tb-dim tb-sheet-note">No Signoff EE boards in this browser yet. Open Signoff EE once' + (DEMO ? ' in its demo' : ', signed in,') + ' to list them here.</p>') +
+      '<label class="tb-ff"><span class="tb-ffl">Client project</span><input class="tb-pin" id="bs-project" list="bs-projects" value="' + esc(p ? p.meta.project : '') + '" placeholder="From the board, or type one"><datalist id="bs-projects">' + projects.map((x) => '<option value="' + esc(x) + '">').join('') + '</datalist></label>' +
+      '<div class="tb-modal-btns">' + (p ? '<button class="btn btn-danger" data-sheet="delete">Delete bench</button><span class="tb-grow"></span>' : '') +
+      '<button class="btn" data-sheet="cancel">Cancel</button><button class="btn btn-primary" data-sheet="save">' + (p ? 'Save' : 'Make bench') + '</button></div>');
+    const card = $('#sheet-card');
+    card.querySelector('#bs-board').addEventListener('change', (e) => {
+      const b = boards.find((x) => x.id === e.target.value);
+      const pj = card.querySelector('#bs-project');
+      if (b && b.project && !pj.value.trim()) pj.value = b.project;
+      const nm = card.querySelector('#bs-name');
+      if (b && !nm.value.trim()) nm.value = b.name + ' bench';
+    });
+    card.onclick = (e) => {
+      const a = e.target.closest('[data-sheet]'); if (!a) return;
+      if (a.dataset.sheet === 'cancel') return closeSheet();
+      if (a.dataset.sheet === 'delete') {
+        if (S.running) { toast('A test is running: Abort it first, then delete the bench'); return; }
+        const name = p.meta.name;
+        ST.remove(p.id); closeSheet();
+        const next = ST.list()[0]; openProject(next ? next.id : null); renderSyncPill();
+        undoToast('Deleted ' + name, () => { ST.update(p.id, { deleted: false }); openProject(p.id); renderSyncPill(); });
+        return;
+      }
+      const name = card.querySelector('#bs-name').value.trim();
+      if (!name) { card.querySelector('#bs-name').focus(); toast('Give the bench a name'); return; }
+      const bid = card.querySelector('#bs-board').value;
+      const bo = bid ? (known.concat(boards).find((x) => x.id === bid) || null) : null;
+      const board = bo ? { id: bo.id, name: bo.name } : null;
+      const project = card.querySelector('#bs-project').value.trim();
+      if (p) ST.update(p.id, { name, project, board });
+      else { const n = ST.create({ name, project, board, defs: NEW_DEFS, script: newScript(name) }); closeSheet(); openProject(n.id); renderSyncPill(); return; }
+      closeSheet(); renderHead(); renderSide(); renderSyncPill();
+    };
+  }
+  const NEW_DEFS = '# Bench targets: one block per instrument or board. Limits are in base units (V, A, Hz, °C).\n\ntarget PSU "Bench power supply"\n  interface lan 192.168.1.40:5025 scpi\n  command output state=on|off "OUTP {state}"\n  command set_voltage v=0..30V "VOLT {v}"\n  telemetry voltage V "MEAS:VOLT?"\n  telemetry current A "MEAS:CURR?"\n';
+  function newScript(name) { return '# ' + name + '\n# One step per line; indent to nest. The rows and this text are the same thing.\n\nsuite ' + name + '\n  test T-01 First test\n    PSU.set_voltage 5 V\n    PSU.output on\n    check PSU.current < 100 mA\n    cleanup\n      PSU.output off\n'; }
+  function undoToast(msg, undo) {
+    const el = document.createElement('div');
+    el.className = 'toast'; el.innerHTML = esc(msg) + ' <button class="btn btn-plain">Undo</button>';
+    el.querySelector('button').onclick = () => { el.remove(); undo(); };
+    $('#toasts').appendChild(el);
+    setTimeout(() => el.remove(), 6000);
+  }
+
+  // The sync pill: where the benches stand, and who's signed in (line 2), as in every Signoff tool.
+  const SY = { busy: false, error: '' };
+  function ago(iso) {
+    const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+    return s < 50 ? 'just now' : s < 3300 ? Math.round(s / 60) + ' min ago' : s < 86400 ? Math.round(s / 3600) + ' h ago' : new Date(iso).toLocaleDateString();
+  }
+  function renderSyncPill() {
+    const pill = $('#sync-pill'); if (!pill) return;
+    const w = window.SignoffFoot ? window.SignoffFoot.who() : {};
+    const n = DEMO ? 0 : ST.unsynced().length, last = ST.lastSync();
+    let title, sub, tone;
+    if (DEMO) { title = 'Demo'; sub = 'Kept in this browser'; tone = 'ok'; }
+    else if (!ST.token()) { title = 'Not signed in'; sub = n ? n + ' unsynced, kept here' : 'Kept in this browser'; tone = n ? 'warn' : ''; }
+    else if (SY.busy) { title = 'Syncing…'; sub = w.login ? '@' + w.login : ''; tone = 'busy'; }
+    else if (SY.error) { title = 'Sync failed'; sub = SY.error; tone = 'err'; }
+    else { title = n ? n + ' unsynced' : last ? 'Synced ' + ago(last.at) : 'Not synced yet'; sub = w.login ? '@' + w.login : ''; tone = n ? 'warn' : last ? 'ok' : ''; }
+    pill.querySelector('.sync-title').textContent = title;
+    const sb = pill.querySelector('.sync-sub'); sb.textContent = sub; sb.classList.toggle('sync-who', !!(sub && sub[0] === '@'));
+    const dot = pill.querySelector('.sync-dot'); if (tone) dot.dataset.tone = tone; else delete dot.dataset.tone;
+    pill.title = DEMO ? 'The demo keeps its benches in this browser' : 'Sync benches with ' + ST.CFG.owner + '/' + ST.CFG.dataRepo;
+  }
+  function openSync() {
+    if (DEMO) { toast('The demo keeps its benches in this browser'); return; }
+    if (!ST.token()) { if (window.SignoffFoot) window.SignoffFoot.settings(); return; }
+    const n = ST.unsynced();
+    sheet('<div class="eyebrow">Sync</div><h3 class="tb-sheet-h">Benches and ' + esc(ST.CFG.owner + '/' + ST.CFG.dataRepo) + '</h3>' +
+      '<p>' + (n.length ? n.length + ' bench' + (n.length > 1 ? 'es have' : ' has') + ' changes not on GitHub yet: ' + esc(n.map((id) => { const x = ST.get(id); return x ? x.meta.name : 'a deleted bench'; }).join(', ')) + '.' : 'Every bench here matches the last sync.') + '</p>' +
+      '<p class="tb-dim">Preview reads GitHub and lists what a sync would write, and writes nothing.</p>' +
+      '<div id="sync-out"></div>' +
+      '<div class="tb-modal-btns"><button class="btn" data-sheet="cancel">Close</button><button class="btn" data-sheet="dry">Preview</button><button class="btn btn-primary" data-sheet="sync">Sync now</button></div>');
+    $('#sheet-card').onclick = async (e) => {
+      const a = e.target.closest('[data-sheet]'); if (!a) return;
+      if (a.dataset.sheet === 'cancel') return closeSheet();
+      const out = $('#sync-out');
+      if (a.dataset.sheet === 'dry') {
+        out.innerHTML = '<p class="tb-dim">Reading GitHub…</p>';
+        try {
+          const r = await ST.sync({ dry: true });
+          const f = r.dry.files;
+          out.innerHTML = f.length ? '<p>A sync would write one commit' + (r.dry.message ? ' (“' + esc(r.dry.message) + '”)' : '') + ':</p><ul class="tb-dry">' + f.map((x) => '<li><code>' + esc(x.path) + '</code> ' + (x.text == null ? 'deleted' : (x.text.length / 1024).toFixed(1) + ' KB') + '</li>').join('') + '</ul>' + (r.conflicts.length ? '<p>' + r.conflicts.length + ' conflict cop' + (r.conflicts.length > 1 ? 'ies' : 'y') + ' would be made.</p>' : '')
+            : '<p>Nothing to write: GitHub already has every bench here.</p>';
+          window.PLUMB.lastDry = r.dry;
+        } catch (err) { out.innerHTML = '<p class="tb-bad">' + esc(err.message) + '</p>'; }
+        return;
+      }
+      closeSheet(); syncNow();
+    };
+  }
+  // quiet: the automatic sync on load and sign-in, which only pulls, and only when nothing here is edited; writing
+  // is Sync now's alone.
+  async function syncNow(quiet) {
+    if (DEMO || !ST.token() || SY.busy || S.running) return;
+    if (quiet && ST.unsynced().length) { renderSyncPill(); return; }
+    SY.busy = true; SY.error = ''; renderSyncPill();
+    try {
+      const r = await ST.sync({ pullOnly: !!quiet });
+      ST.reload();
+      if (CUR && !ST.get(CUR)) { const nx = ST.list()[0]; openProject(nx ? nx.id : null); }
+      else if (CUR && !S.running) { const p = ST.get(CUR); if (p.bench.script !== S.text || p.bench.defs !== S.defsText) openProject(CUR); }
+      else if (!CUR && ST.list().length) openProject(ST.list()[0].id);
+      if (!quiet || r.pushed || r.conflicts.length) toast(r.pushed ? 'Synced: ' + r.pushed + ' file' + (r.pushed > 1 ? 's' : '') + ' written' : 'Synced: nothing new to write');
+      if (r.conflicts.length) toast(r.conflicts.length + ' bench' + (r.conflicts.length > 1 ? 'es were' : ' was') + ' edited in two places; the other copy is kept as “(conflict copy)”');
+    } catch (err) {
+      SY.error = err.status === 404 ? 'No access to ' + ST.CFG.dataRepo : err.message;
+    } finally { SY.busy = false; renderSyncPill(); renderSide(); }
+  }
+
+  // A new build on the site: reload once the page is idle (no run, no sheet, nothing open for editing), as every
+  // Signoff tool does; benches are already kept in this browser.
+  const UPDATE_KEY = 'signoff.toolUpdate.plumb';
+  function checkForUpdate() {
+    const mine = (window.PLUMB || {}).VERSION; if (!mine) return;
+    fetch('assets/version.js?nc=' + Date.now(), { cache: 'no-store' }).then((r) => (r.ok ? r.text() : '')).then((text) => {
+      const m = /VERSION\s*=\s*'([0-9a-f]+)'/.exec(text || ''); if (!m || m[1] === mine) return;
+      try { if (sessionStorage.getItem(UPDATE_KEY) === m[1]) return; } catch (e) { /* storage off */ }
+      const idle = !S.running && $('#sheet').hidden && $('#modal').hidden && !S.form && document.activeElement !== $('#script') && !document.querySelector('#people-pop, .tk-wrap');
+      if (!idle) return;
+      try { sessionStorage.setItem(UPDATE_KEY, m[1]); } catch (e) { /* storage off */ }
+      toast('Tool updated'); setTimeout(() => location.reload(), 900);
+    }).catch(() => { /* offline */ });
   }
 
   function toggleNav() {
@@ -2020,18 +2214,18 @@ suite Main PCBA
     if (window.innerWidth <= 860) app.classList.toggle('nav-open');
     else {
       app.classList.toggle('side-collapsed');
-      try { localStorage.setItem('plumb.lab.side', app.classList.contains('side-collapsed') ? '1' : ''); } catch (e) { /* storage off */ }
+      try { localStorage.setItem('plumb.v1.ui.side', app.classList.contains('side-collapsed') ? '1' : ''); } catch (e) { /* storage off */ }
     }
     X.dirty = true;
   }
   function setView(v) {
     S.view = v;
-    try { localStorage.setItem('plumb.lab.view', v); } catch (e) { /* storage off */ }
+    try { localStorage.setItem('plumb.v1.ui.view', v); } catch (e) { /* storage off */ }
     document.querySelectorAll('#ctl-view button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
     $('#tests-wrap').dataset.view = v;
   }
   function renderAttach() {
-    $('#ctl-attach').innerHTML = Object.keys(sim.attached).map((k) => '<button class="tb-chip tb-chip-btn' + (sim.attached[k] ? '' : ' off') + '" data-t="' + k + '" title="Lab only: attach or detach ' + k + '">' + (sim.attached[k] ? '✓ ' : '') + k + '</button>').join('');
+    $('#ctl-attach').innerHTML = Object.keys(sim.attached).map((k) => '<button class="tb-chip tb-chip-btn' + (sim.attached[k] ? '' : ' off') + '" data-t="' + k + '" title="Simulated: attach or detach ' + k + '">' + (sim.attached[k] ? '✓ ' : '') + k + '</button>').join('');
   }
 
   function bind() {
@@ -2043,8 +2237,10 @@ suite Main PCBA
       if (b.dataset.tab === 'explore') renderExplorer();
     });
     $('#theme-btn').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true));
-    $('#settings-btn').addEventListener('click', () => toast('Lab: Settings, sign-in, and sync come with the tool'));
-    $('#sync-pill').addEventListener('click', () => toast('Lab: nothing syncs. The tool will keep benches, suites, and runs in plumb_data.'));
+    $('#sync-pill').addEventListener('click', openSync);
+    document.addEventListener('click', (e) => { const a = e.target.closest('[data-act="edit-bench"], [data-act="new-bench"]'); if (!a) return; openBenchSheet(a.dataset.act === 'edit-bench' ? CUR : null); });
+    $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#sheet').hidden) closeSheet(); });
     document.querySelectorAll('[data-act="nav"]').forEach((b) => b.addEventListener('click', toggleNav));
     $('#app').addEventListener('click', (e) => { if (e.target === $('#app') && $('#app').classList.contains('nav-open')) { e.stopPropagation(); $('#app').classList.remove('nav-open'); } }, true);
     document.addEventListener('keydown', (e) => { if (e.key === '[' && !e.target.closest('input, textarea, select')) toggleNav(); });
@@ -2054,18 +2250,17 @@ suite Main PCBA
       const g = e.target.closest('[data-group]');
       if (g) { closedGroups.has(g.dataset.group) ? closedGroups.delete(g.dataset.group) : closedGroups.add(g.dataset.group); renderSide(); return; }
       const b = e.target.closest('[data-bench]');
-      if (b && b.dataset.bench !== 'main') toast('Lab: only the Main PCBA bench is built');
+      if (b && b.dataset.bench !== CUR) openProject(b.dataset.bench);
       if (b && window.innerWidth <= 860) $('#app').classList.remove('nav-open');
     });
-    $('[data-act="new-bench"]').addEventListener('click', () => toast('Lab: New bench would pick targets from the library, then start an empty suite'));
     $('#ctl-view').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.v); });
-    $('#ctl-fault').addEventListener('change', (e) => { sim.fault = e.target.value; sim.update(); log('info', 'Lab: fault set to ' + e.target.selectedOptions[0].text.toLowerCase()); });
+    $('#ctl-fault').addEventListener('change', (e) => { sim.fault = e.target.value; sim.update(); log('info', 'Simulated: fault set to ' + e.target.selectedOptions[0].text.toLowerCase()); });
     $('#ctl-attach').addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
       sim.attached[b.dataset.t] = !sim.attached[b.dataset.t];
       renderAttach(); renderRows(); if (!$('[data-pane="bench"]').hidden) renderTargets();
     });
-    $('#run-all').addEventListener('click', () => run(testsUnder(S.tree.root)));
+    $('#run-all').addEventListener('click', () => { if (CUR) run(testsUnder(S.tree.root)); });
     $('#abort').addEventListener('click', () => { S.abort = true; log('info', 'Abort: stopping, then cleanup'); });
     $('#log-clear').addEventListener('click', () => { S.log = []; renderLog(); });
 
@@ -2186,20 +2381,43 @@ suite Main PCBA
     const kept = suiteTheme();
     const dark = kept ? kept === 'dark' : window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     setTheme(dark ? 'dark' : 'light');
-    try { if (localStorage.getItem('plumb.lab.side')) $('#app').classList.add('side-collapsed'); } catch (e) { /* storage off */ }
+    try { if (localStorage.getItem('plumb.v1.ui.side')) $('#app').classList.add('side-collapsed'); } catch (e) { /* storage off */ }
+    if (DEMO) {
+      const b = $('#demo-banner');
+      b.hidden = false; document.body.classList.add('has-banner');
+      b.innerHTML = 'Demo: the made-up Smart Thermostat for Acme Climate. Benches here stay in this browser, and the bench is simulated. <a href="./">Leave the demo</a>';
+      document.querySelectorAll('[data-demo-href]').forEach((a) => { a.href = a.getAttribute('href') + '?demo'; });
+      // The demo bench: the thermostat's Main PCBA, linked to Signoff EE's demo board of the same name.
+      if (!ST.get(DEMO_ID)) ST.create({ id: DEMO_ID, name: 'Main PCBA bring-up', project: 'Smart Thermostat', board: { id: 'pdemo7', name: 'Main PCBA' }, defs: DEFAULT_DEFS, script: DEFAULT_SCRIPT });
+    }
+    $('#version').textContent = 'Build ' + ((window.PLUMB || {}).VERSION || 'dev');
     setView(S.view);
+    S.defsText = ''; S.text = '';
     loadDefs();
-    reparse(false);
+    S.loading = true; reparse(false); S.loading = false;
     bind();
     bindExplorer();
     bindInspector();
     bindAutocomplete();
     $('#ref-btn').addEventListener('click', openReference);
+    if (window.SignoffFoot) window.SignoffFoot.mount({
+      settings: '[data-foot-settings]', people: '#people-link', tools: '#side-tools',
+      theme: () => document.documentElement.dataset.theme, setTheme: (t) => setTheme(t, true),
+      intro: 'Plumb keeps benches in this browser. Signed in, they sync with the private plumb_data repo, and each can name the Signoff EE board it tests.',
+      changed: () => { renderSyncPill(); renderEmpty(); syncNow(true); }
+    });
+    let want = null; try { want = localStorage.getItem(CUR_KEY); } catch (e) { /* storage off */ }
+    const first = (want && ST.get(want)) ? want : (ST.list()[0] || {}).id;
+    openProject(first || null);
+    renderSyncPill();
     setRate(X.rate);
     requestAnimationFrame(plotLoop);
     setInterval(tickBench, 250);
-    log('info', 'Simulated bench ready: PSU, SCOPE, LOGIC, and MAIN attached.');
-    window.TBLab = { S, X, sim, drawPlot, parseScript, serialize, parseStep, parseQty, fmtQty, lint, run, testsUnder };
+    setInterval(renderSyncPill, 60000);
+    setTimeout(checkForUpdate, 5000); setInterval(checkForUpdate, 5 * 60000);
+    if (!DEMO) syncNow(true);
+    log('info', 'Simulated bench: PSU, SCOPE, LOGIC, and MAIN attached. Real instruments need the bench bridge (to come).');
+    window.TBLab = { S, X, sim, drawPlot, parseScript, serialize, parseStep, parseQty, fmtQty, lint, run, testsUnder, openProject, ST };
   }
   start();
 })();

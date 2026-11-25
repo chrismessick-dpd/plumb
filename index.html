@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- Plumb: bench tests. A Plumb project is one bench (target definitions and tests, both text), linked to a Signoff EE
+     board, kept in this browser and synced with the private plumb_data repo through api.github.com when signed in.
+     Runs are simulated until the local bridge exists; the demo is the made-up Smart Thermostat (Acme Climate).
+     Script steps load Pyodide from jsDelivr inside their Worker (an open decision: host it, or allow the CDN). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self' https://api.github.com https://signoff-auth.misty-dawn-b371.workers.dev https://signoff-auth-dev.misty-dawn-b371.workers.dev; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Plumb · Bench tests</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23004952'/%3E%3Cpath d='M16 4v6' stroke='%23fff' stroke-width='2.2' stroke-linecap='round'/%3E%3Crect x='12' y='10' width='8' height='2.6' rx='1' fill='%23fff'/%3E%3Cpath d='M10.5 14h11l-1.4 3.8L16 28l-4.1-10.2z' fill='%23fff'/%3E%3C/svg%3E">
+<!-- Home-screen app: the hub's manifest, scoped to the whole site, so every tool opens inside one app. -->
+<link rel="manifest" href="../signoff/manifest.webmanifest">
+<link rel="apple-touch-icon" href="../signoff/assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Signoff">
+<link rel="stylesheet" href="assets/suite.css">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+<div id="demo-banner" class="demo-banner" hidden></div>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 20 32" class="plumb-mark"><path d="M10 1v8" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><rect x="5.5" y="9" width="9" height="3" rx="1" fill="#fff"/><path d="M4 13.5h12l-1.6 4.4L10 30.5 5.6 17.9z" fill="#fff"/></svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">Plumb</div>
+        <div class="brand-sub">Bench tests</div>
+      </div>
+      <button class="icon-btn side-collapse" data-act="nav" title="Hide sidebar ( [ )" aria-label="Hide sidebar">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5"/><path d="M7.5 3.5v13"/><path d="M13.5 8l-2 2 2 2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="side-search">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5" stroke-linecap="round"/></svg>
+      <input id="bench-search" type="search" placeholder="Search benches" autocomplete="off">
+    </div>
+    <div class="side-head">
+      <span class="side-label">Benches</span>
+      <button class="icon-btn" data-act="new-bench" title="New bench" aria-label="New bench">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+      </button>
+    </div>
+    <nav class="side-list" id="bench-list"></nav>
+    <div class="side-tools" id="side-tools">
+      <div class="side-head"><span class="side-label">Dovetail Signoff</span></div>
+      <a class="side-link" href="../ee_design_review/index.html" data-signed data-demo-href hidden title="Switch to Signoff EE, electrical design review">
+        <span class="tool-mark tool-mark-text">EE</span>
+        <span>Signoff EE<small>Electrical design review</small></span>
+      </a>
+      <a class="side-link" href="../me_design_review/index.html" data-signed data-demo-href hidden title="Switch to Signoff ME, mechanical design review">
+        <span class="tool-mark tool-mark-text">ME</span>
+        <span>Signoff ME<small>Mechanical design review</small></span>
+      </a>
+      <a class="side-link" href="../fw_design_review/index.html" data-signed data-demo-href hidden title="Switch to Signoff FW, firmware design review">
+        <span class="tool-mark tool-mark-text">FW</span>
+        <span>Signoff FW<small>Firmware design review</small></span>
+      </a>
+      <a class="side-link" href="../signoff_pl/index.html" data-signed data-internal data-demo-href hidden title="Switch to Signoff PL, the project lead's view">
+        <span class="tool-mark tool-mark-text">PL</span>
+        <span>Signoff PL<small>Project lead</small></span>
+      </a>
+      <a class="side-link" href="../flasher/index.html" data-demo-href title="Open Flasher, the firmware flasher">
+        <span class="tool-mark"><svg viewBox="0 0 18 18" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 1.8 4 10h5l-1 6.2L14 8H9z"/></svg></span>
+        <span>Flasher<small>Firmware flasher</small></span>
+      </a>
+      <a class="side-link" href="../signoff/index.html" data-demo-href title="Back to Dovetail Signoff, all tools">
+        <span class="tool-mark"><svg viewBox="0 0 18 18" fill="#fff"><rect x="2" y="2" width="6" height="6" rx="1.5"/><rect x="10" y="2" width="6" height="6" rx="1.5"/><rect x="2" y="10" width="6" height="6" rx="1.5"/><rect x="10" y="10" width="6" height="6" rx="1.5"/></svg></span>
+        <span>All tools<small>Dovetail Signoff home</small></span>
+      </a>
+    </div>
+    <button type="button" class="side-link" id="people-link" data-people-open title="People and access in Signoff EE, ME, and FW" hidden>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7.5" cy="7" r="2.8"/><path d="M2.5 16.5c.6-2.8 2.6-4.3 5-4.3s4.4 1.5 5 4.3"/><circle cx="14" cy="7.8" r="2.2"/><path d="M13.6 12.3c2 .1 3.4 1.4 3.9 3.7"/></svg>
+      People &amp; access
+    </button>
+    <div class="side-version tb-dim" id="version"></div>
+    <div class="side-foot">
+      <button class="sync-pill" id="sync-pill" title="Sync benches with plumb_data">
+        <span class="sync-dot"></span>
+        <span class="sync-text"><span class="sync-title">Not signed in</span><span class="sync-sub">Kept in this browser</span></span>
+      </button>
+      <button class="icon-btn" id="theme-btn" title="Dark mode" aria-label="Toggle dark mode"></button>
+      <button class="icon-btn" data-foot-settings title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main" id="main">
+    <header class="toolbar" id="toolbar">
+      <button class="icon-btn menu-toggle" data-act="nav" title="Show sidebar ( [ )" aria-label="Show sidebar">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h14M3 10h14M3 14h14"/></svg>
+      </button>
+      <div class="toolbar-title" id="toolbar-title">Plumb</div>
+      <div class="toolbar-center">
+        <div class="seg" id="tabs" role="tablist">
+          <button data-tab="tests" class="on">Tests</button>
+          <button data-tab="bench">Bench</button>
+          <button data-tab="explore">Telemetry and commands</button>
+          <button data-tab="research">Research</button>
+        </div>
+      </div>
+      <div class="toolbar-actions">
+        <button class="btn btn-danger" id="abort" disabled>Abort</button>
+        <button class="btn btn-primary" id="run-all">Run all</button>
+      </div>
+    </header>
+    <div class="page tb-empty" id="empty" hidden></div>
+    <div class="page plumb-page">
+      <div class="page-head">
+        <div class="page-head-text">
+          <div class="eyebrow" id="bench-eyebrow"></div>
+          <h1 class="page-title"><span id="bench-title"></span> <button class="btn btn-plain tb-edit-bench" data-act="edit-bench" title="Name, client project, and the Signoff EE board this bench tests">Details</button></h1>
+          <div class="page-sub"><span id="bench-sub"></span><span class="sep">·</span><span id="bench-board"></span><span class="sep">·</span><span class="tb-dim">Runs are simulated until the bench bridge exists</span></div>
+        </div>
+        <div class="card tb-labctl" title="Simulated: these switches stand in for real hardware until the bench bridge exists">
+          <div class="tb-labctl-head">Simulated bench</div>
+          <label class="tb-ctl-row"><span>Attached</span><span class="tb-attach" id="ctl-attach"></span></label>
+          <label class="tb-ctl-row"><span>Fault</span>
+            <select id="ctl-fault" class="tb-select">
+              <option value="none">None</option>
+              <option value="idle">High idle current</option>
+              <option value="relay2">Relay 2 stuck open</option>
+              <option value="slowboot">Slow boot (6 s)</option>
+              <option value="brownout">Browns out at 10 V</option>
+            </select>
+          </label>
+        </div>
+      </div>
+  <section class="tb-pane" data-pane="tests">
+    <div class="tb-bar">
+      <span class="seg" id="ctl-view"><button data-v="rows">Rows</button><button data-v="text">Script</button><button data-v="side">Side by side</button></span>
+      <button class="btn btn-plain" id="ref-btn" title="Every kind of step, with examples">Step reference</button>
+      <span class="tb-summary" id="summary"></span>
+      <span class="tb-rt" id="roundtrip"></span>
+      <span class="tb-py st-off" id="py-state" title="Script steps are Python, run in the page by Pyodide. It loads the first time a script runs.">Python not loaded</span>
+    </div>
+    <div class="tb-tests" id="tests-wrap">
+      <div class="tb-rows" id="rows"></div>
+      <div class="tb-textcol" id="textcol">
+        <div class="tb-codewrap"><pre class="tb-code-bg" id="script-bg" aria-hidden="true"></pre><textarea id="script" class="tb-code" spellcheck="false" wrap="off"></textarea></div>
+        <div class="tb-lint" id="lint"></div>
+      </div>
+    </div>
+    <div class="tb-lower">
+      <div class="tb-card tb-log-card">
+        <div class="tb-card-head"><b>Log</b><span class="tb-dim">→ sent on the wire, ← read back</span><button class="btn btn-plain" id="log-clear">Clear</button></div>
+        <div class="tb-log" id="log"></div>
+      </div>
+      <div class="tb-card tb-ev-card">
+        <div class="tb-card-head"><b>Evidence for Signoff</b><span class="tb-dim">mock</span></div>
+        <div id="evidence"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tb-pane" data-pane="bench" hidden>
+    <p class="tb-pnote" id="bench-note">Each card is a target: its interface, live telemetry, and a command sender. Click a card to open its properties, where its definition is plain text you can edit.</p>
+    <div class="tb-targets" id="targets"></div>
+  </section>
+
+  <section class="tb-pane" data-pane="explore" hidden>
+    <div class="tb-ex">
+      <aside class="tb-card tb-ex-tree">
+        <input id="ex-q" class="tb-ex-q" type="search" placeholder="Filter telemetry and commands" autocomplete="off">
+        <div id="ex-list" class="tb-ex-list"></div>
+      </aside>
+      <div class="tb-ex-right">
+        <div class="tb-card tb-plot-card">
+          <div class="tb-card-head tb-plot-head">
+            <b>Plot</b>
+            <span class="tb-legend" id="plot-legend"></span>
+            <span class="seg" id="plot-stack" title="A lane per point, or points with the same unit on one lane"><button data-v="lanes">Lanes</button><button data-v="unit">Overlay by unit</button></span>
+            <span class="seg" id="plot-win"><button data-v="30">30 s</button><button data-v="120">2 min</button><button data-v="600">10 min</button></span>
+            <button class="btn" id="plot-pause">Pause</button>
+            <button class="btn btn-plain" id="plot-clear">Clear</button>
+          </div>
+          <div class="tb-plot-wrap" id="plot-wrap"><canvas id="plot"></canvas><div class="tb-plot-tip" id="plot-tip" hidden></div><div class="tb-plot-empty" id="plot-empty">Tick telemetry on the left to plot it. Points with the same unit share a lane; text points like a state draw as a band.</div></div>
+          <div class="tb-plot-foot">
+            <label>Sample <select class="tb-select" id="plot-rate"><option value="1">1 Hz</option><option value="5">5 Hz</option><option value="10" selected>10 Hz</option><option value="20">20 Hz</option></select></label>
+            <span class="tb-dim" id="plot-stats"></span>
+          </div>
+        </div>
+        <div class="tb-card tb-ex-detail" id="ex-detail"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tb-pane tb-research" data-pane="research" hidden>
+    <div class="tb-doc">
+      <h2>What this lab is for</h2>
+      <p>Write tests from unit level (one rail on one board) up to system level (a board, its instruments, and an operator) in one place, run them interactively, and keep the results as verification evidence. The lab tries three ideas:</p>
+      <ol>
+        <li><b>Targets with interfaces, commands, and telemetry</b>, as COSMOS has them, defined in plain text, so a test says <code>PSU.set_voltage 24 V</code> and <code>check MAIN.rail_3v3 3.3 V ±3%</code> and never deals with SCPI strings or serial framing.</li>
+        <li><b>One step per line</b>, so the text and the rows are the same thing (as Scribe's document and diagram are). Simple tests never need code; the <code>script</code> step, in Python, is the escape hatch for loops and searches.</li>
+        <li><b>Needs come from the steps.</b> A test that uses <code>SCOPE</code> needs the scope; detach it and that test skips with a reason. That's how one suite scales from a board on a desk to a full bench, with no tiers to keep up by hand.</li>
+      </ol>
+
+      <h2>What other tools do, and what to take</h2>
+      <div class="tb-tablewrap">
+      <table class="tb-table">
+        <thead><tr><th>Tool</th><th>Model</th><th>Take</th><th>Leave</th></tr></thead>
+        <tbody>
+          <tr><td><b>COSMOS</b> (Ball Aerospace; now OpenC3 COSMOS, open source)</td><td>Targets, each with an interface (TCP/IP, serial, UDP) and command and telemetry definition files; telemetry items carry yellow and red limits. Script Runner runs procedures that send commands, read telemetry, and wait on a condition with a timeout. Test Runner groups scripts into suites and groups with setup and teardown. Packet viewer, limits monitor, and grapher tools.</td><td>The target, interface, command, and telemetry model; limits on telemetry; "wait until X within N s" as a first-class step; suite and group structure; a live bench view.</td><td>Ruby (OpenC3 now also takes Python); heavy install (containers); definitions built for binary packets, not SCPI and line protocols; no graphical view of a test.</td></tr>
+          <tr><td><b>NI TestStand</b></td><td>Sequences of typed steps (pass/fail, numeric limit, multiple numeric limit, string value, flow control, sequence call), with setup, main, and cleanup groups; process models for sequential, batch, and parallel runs; reports.</td><td>Typed steps shown as rows; a numeric limit step with units; cleanup that always runs; calling one test from another.</td><td>Licensing, Windows only, and a GUI-only sequence format that's hard to diff or review.</td></tr>
+          <tr><td><b>OpenTAP</b> (Keysight, MPL 2.0)</td><td>Test plans as a tree of test steps whose verdicts roll up to their parents; instruments and DUTs as plugin resources; result listeners (text log, SQLite, PostgreSQL).</td><td>Verdict roll-up; instruments and the DUT as the same kind of thing; results as a stream any listener can store.</td><td>C# plugins for every instrument; a desktop editor.</td></tr>
+          <tr><td><b>OpenHTF</b> (Google)</td><td>Python tests made of phases; measurements with validators decide pass or fail; plugs wrap each instrument or DUT.</td><td>Measurements as named records with limits, not just asserts; one wrapper per instrument.</td><td>Code-only; no operator view to speak of.</td></tr>
+          <tr><td><b>HardPy, TesterKit</b></td><td>Plain pytest tests with a browser operator panel and a results database.</td><td>A browser panel over tests; operator prompts in the page.</td><td>The tests are still code; the panel only runs them.</td></tr>
+          <tr><td><b>pytest suites</b> (as on our own projects)</td><td>Tests marked by what's attached (board only, plus a load, plus a probe, manual, destructive); row ids; safety off in <code>finally</code>; operator steps for buttons.</td><td>Needs by what's attached; ids per row; cleanup that always runs; operator steps; a headless run for CI and for Claude.</td><td>Markers kept by hand; no interactive view; results stay in a terminal.</td></tr>
+          <tr><td><b>Robot Framework</b></td><td>Keyword-driven tests in plain-text tables.</td><td>Proof that readable step text works for non-programmers.</td><td>Its own keyword plumbing in Python.</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h2>How it would talk to hardware</h2>
+      <svg class="tb-arch" viewBox="0 0 760 250" role="img" aria-label="Architecture: the page reaches serial and USB devices directly and network and sigrok devices through a local bridge">
+        <rect x="20" y="85" width="170" height="80" rx="12" class="a-box a-main"/>
+        <text x="105" y="118" class="a-t">The tool (a page)</text>
+        <text x="105" y="138" class="a-s">tests, rows, bench view</text>
+        <rect x="290" y="20" width="200" height="56" rx="10" class="a-box"/>
+        <text x="390" y="44" class="a-t">Web Serial</text><text x="390" y="62" class="a-s">COM ports: the board, a supply</text>
+        <rect x="290" y="97" width="200" height="56" rx="10" class="a-box"/>
+        <text x="390" y="121" class="a-t">WebUSB</text><text x="390" y="139" class="a-s">USBTMC scopes (WinUSB driver)</text>
+        <rect x="290" y="174" width="200" height="56" rx="10" class="a-box a-bridge"/>
+        <text x="390" y="198" class="a-t">Local bridge (Python)</text><text x="390" y="216" class="a-s">WebSocket on localhost</text>
+        <rect x="570" y="174" width="170" height="56" rx="10" class="a-box"/>
+        <text x="655" y="198" class="a-t">LAN SCPI, VISA, sigrok</text><text x="655" y="216" class="a-s">raw TCP the browser can't open</text>
+        <rect x="570" y="58" width="170" height="56" rx="10" class="a-box a-main"/>
+        <text x="655" y="82" class="a-t">Headless runner (Python)</text><text x="655" y="100" class="a-s">same tests: CI, Claude</text>
+        <path d="M190 112 C 240 112, 240 48, 290 48" class="a-l"/>
+        <path d="M190 125 L 290 125" class="a-l"/>
+        <path d="M190 140 C 240 140, 240 202, 290 202" class="a-l"/>
+        <path d="M490 202 L 570 202" class="a-l"/>
+        <path d="M655 114 L 655 174" class="a-l a-dash"/>
+      </svg>
+      <ul>
+        <li><b>Direct from the page:</b> Web Serial for COM ports, and WebUSB for USB devices, as Flasher already does. USBTMC instruments work over WebUSB, but on Windows only once the instrument uses the WinUSB driver (Zadig), which takes it away from NI-VISA.</li>
+        <li><b>Through a local bridge:</b> browsers can't open raw TCP sockets, so LAN instruments (SCPI on port 5025), VISA, and sigrok logic analyzers need a small Python agent on the bench PC (PyVISA, pyserial, sigrok) that the page reaches over a localhost WebSocket. The same agent could run tests headless.</li>
+        <li><b>Plotting cost:</b> each point keeps 10 minutes at up to 20 Hz in a ring buffer (about 140 KB), and the plot draws one column per pixel, so ten points over 10 minutes (120,000 samples) draw in about 10 ms. The real limit is the instruments: the tool should poll only what's plotted, on screen, or used by a running test, at a rate each interface can answer.</li>
+        <li><b>Headless:</b> a Python runner reads the same test text and target definitions, so CI and Claude can run a suite and the page shows the results.</li>
+      </ul>
+
+      <h2>Where it fits the suite</h2>
+      <ul>
+        <li>A test lists the requirements it verifies (<code>[REQ-004]</code>). A run becomes evidence on those requirements in Signoff EE or FW, and Signoff PL rolls it up.</li>
+        <li>Flasher puts firmware on the board; a suite's first step could be "flash this release". Bring-up checklists in Signoff EE could link to the test that covers them.</li>
+        <li>Targets and suites would live in a private data repo like the other tools; results as one file per run.</li>
+      </ul>
+
+      <h2>Decided (2026-11-23)</h2>
+      <ul>
+        <li><b>Name: Plumb</b>, checking that something is true, after the suite's shop words (Dovetail, Jig).</li>
+        <li><b>Python everywhere.</b> The <code>script</code> step is Python, run in the browser by Pyodide (CPython compiled to WebAssembly) in a Worker; the first script loads about 10 MB once, then Python stays loaded. The local bridge and the headless runner are Python too (PyVISA, pyserial, and sigrok's bindings), so a test's script runs the same in the page and on the bench PC.</li>
+      </ul>
+
+      <h2>Decisions to make</h2>
+      <ol>
+        <li><b>Where Pyodide comes from.</b> This lab loads it from the jsDelivr CDN inside the Worker. The suite's pages load nothing from outside, so the real tool would either host Pyodide's files itself (about 10 MB in the repo or a release) or allow that one CDN.</li>
+        <li><b>The bridge's job:</b> only a pipe to instruments the page can't reach, or also the place a long or unattended run happens.</li>
+        <li><b>A failed check:</b> in this lab a failed <code>check</code> marks the test failed and carries on, while a <code>wait until</code> timeout or an error stops it. pytest stops at the first failure.</li>
+        <li><b>Call and cleanup:</b> here a called test's cleanup waits until the calling test ends, so <code>call PWR-01</code> powers up and the supply goes off only at the very end: the test's own cleanup runs first (relays off), then the called test's (supply off).</li>      </ol>
+    </div>
+  </section>
+    </div>
+  </main>
+</div>
+<aside class="inspector" id="inspector" aria-label="Target properties"></aside>
+<div class="toasts" id="toasts"></div>
+
+<div class="tb-modal" id="modal" hidden>
+  <div class="tb-modal-card">
+    <div class="eyebrow">Operator</div>
+    <p id="modal-text"></p>
+    <div class="tb-modal-btns" id="modal-btns"></div>
+  </div>
+</div>
+
+<div class="tb-modal" id="sheet" hidden><div class="tb-modal-card tb-sheet" id="sheet-card"></div></div>
+
+<script src="assets/version.js"></script>
+<script src="assets/vendor/localstore.js"></script>
+<script src="assets/vendor/model.js"></script>
+<script src="assets/vendor/auth.js"></script>
+<script src="assets/vendor/github.js"></script>
+<script src="assets/store.js"></script>
+<script src="../signoff/assets/people.js"></script>
+<script src="../signoff/assets/invites.js"></script>
+<script src="../signoff/assets/sidefoot.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
