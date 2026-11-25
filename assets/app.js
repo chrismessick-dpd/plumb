@@ -817,6 +817,15 @@ suite Main PCBA
     return '<span class="tb-v tb-v-' + v + (small ? ' sm' : '') + '" title="' + l + '"><i>' + g + '</i>' + (small ? '' : l) + '</span>';
   }
 
+  const FOLD_KEY = 'plumb.v1.ui.folded';
+  function foldedSet() {
+    try { const all = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}'); return new Set(all[CUR] || []); } catch (e) { return new Set(); }
+  }
+  function saveFolded(set) {
+    try { const all = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}'); if (set.size) all[CUR] = [...set]; else delete all[CUR]; localStorage.setItem(FOLD_KEY, JSON.stringify(all)); } catch (e) { /* storage off */ }
+  }
+  function groupsUnder(n) { return n.kind === 'group' ? [n] : (n.children || []).flatMap(groupsUnder); }
+
   function renderRows() {
     const tree = S.tree; if (!tree) return;
     const wrap = $('#rows');
@@ -840,13 +849,25 @@ suite Main PCBA
       (c.error ? ' · <b class="cf">' + c.error + ' errors</b>' : '') + (c.skip ? ' · ' + c.skip + ' skipped' : '') + '</span>';
   }
 
-  function nodeHtml(n) {
-    if (n.kind === 'suite' || n.kind === 'group') {
-      return '<div class="tb-' + n.kind + '"><div class="tb-' + n.kind + '-head"><span class="tb-kind">' + n.kind + '</span><b>' + esc(n.name) + '</b>' +
+  function nodeHtml(n, folded) {
+    folded = folded || foldedSet();
+    if (n.kind === 'group') {
+      const shut = folded.has(n.name);
+      return '<div class="tb-group' + (shut ? ' folded' : '') + '"><div class="tb-group-head" data-act="fold" data-name="' + esc(n.name) + '" title="' + (shut ? 'Show' : 'Hide') + ' this group\u2019s tests">' +
+        '<span class="tb-chev">' + (shut ? '▸' : '▾') + '</span><span class="tb-kind">group</span><b>' + esc(n.name) + '</b>' +
         countsHtml(counts(n)) + '<span class="tb-grow"></span>' +
-        (n.kind === 'group' ? '<button class="btn btn-plain" data-act="add-test" data-idx="' + n.idx + '">+ Test</button>' : '') +
+        '<button class="btn btn-plain" data-act="add-test" data-idx="' + n.idx + '">+ Test</button>' +
         '<button class="btn btn-plain" data-act="run" data-idx="' + n.idx + '"' + (S.running ? ' disabled' : '') + '>▶ Run</button></div>' +
-        n.children.map(nodeHtml).join('') + '</div>';
+        (shut ? '' : n.children.map((c) => nodeHtml(c, folded)).join('')) + '</div>';
+    }
+    if (n.kind === 'suite') {
+      const gs = groupsUnder(n), allShut = gs.length && gs.every((g) => folded.has(g.name));
+      return '<div class="tb-suite"><div class="tb-suite-head"><span class="tb-kind">suite</span><b>' + esc(n.name) + '</b>' +
+        countsHtml(counts(n)) + '<span class="tb-grow"></span>' +
+        (gs.length ? '<button class="btn btn-plain tb-foldall" data-act="fold-all" data-idx="' + n.idx + '" data-to="' + (allShut ? 'open' : 'shut') + '" title="' + (allShut ? 'Expand every group' : 'Collapse every group') + '">' +
+          (allShut ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/><path d="M4 2.5l4 4 4-4" opacity=".5"/></svg>Expand all' : '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 10l4-4 4 4"/><path d="M4 13.5l4-4 4 4" opacity=".5"/></svg>Collapse all') + '</button>' : '') +
+        '<button class="btn btn-plain" data-act="run" data-idx="' + n.idx + '"' + (S.running ? ' disabled' : '') + '>▶ Run</button></div>' +
+        n.children.map((c) => nodeHtml(c, folded)).join('') + '</div>';
     }
     if (n.kind === 'test') return testHtml(n);
     return '<div class="tb-orphan">' + esc(n.text) + ' <span class="tb-lintmark">✕ ' + esc((S.issues[n.idx] || []).join('; ')) + '</span></div>';
@@ -2288,6 +2309,11 @@ suite Main PCBA
     rows.addEventListener('click', (e) => {
       const a = e.target.closest('[data-act]'); if (!a) return;
       const act = a.dataset.act;
+      if (act === 'fold' && !e.target.closest('button')) { const f = foldedSet(), k = a.dataset.name; f.has(k) ? f.delete(k) : f.add(k); saveFolded(f); renderRows(); return; }
+      if (act === 'fold-all') {
+        const n = S.tree.nodes.find((x) => x.idx === +a.dataset.idx); if (!n) return;
+        const f = foldedSet(); groupsUnder(n).forEach((g) => (a.dataset.to === 'shut' ? f.add(g.name) : f.delete(g.name))); saveFolded(f); renderRows(); return;
+      }
       if (act === 'toggle' && !e.target.closest('button')) { const id = a.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); renderRows(); }
       if (act === 'run') { e.stopPropagation(); const n = S.tree.nodes.find((x) => x.idx === +a.dataset.idx); if (n) run(testsUnder(n)); }
       if (act === 'del') {

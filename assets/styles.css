@@ -85,6 +85,12 @@
 .tb-group { margin: 6px 0 14px; background: var(--bg-elev); border-radius: var(--radius); box-shadow: var(--shadow-sm), 0 0 0 1px var(--hair); overflow: hidden; }
 .tb-group-head { padding: 8px 12px; border-bottom: 1px solid var(--hair); background: var(--bg-sunk); }
 .tb-group-head b { font: 600 14px var(--display); }
+.tb-group-head { cursor: pointer; user-select: none; }
+.tb-group-head:hover { background: var(--hair); }
+.tb-group.folded > .tb-group-head { border-bottom: none; }
+.tb-group-head .tb-chev { width: 10px; }
+.tb-foldall { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); }
+.tb-foldall svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tb-group-head .btn, .tb-suite-head .btn { padding: 2px 8px; font-size: 12px; }
 .tb-kind { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 
