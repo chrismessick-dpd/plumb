@@ -102,7 +102,7 @@ target MAIN "Main PCBA (board under test)"
       } else if ((m = /^interface\s+(\S+)\s*(.*)$/.exec(line))) {
         const parts = m[2].split(/\s+/);
         cur.iface = { type: m[1], parts, text: m[1] + ' ' + m[2] };
-      } else if ((m = /^command\s+([a-z_]\w*)\s*(.*?)(?:\s*->\s*(\w+))?$/.exec(line))) {
+      } else if ((m = /^command\s+([A-Za-z_]\w*)\s*(.*?)(?:\s*->\s*(\w+))?$/.exec(line))) {
         const rest = m[2];
         const wm = /"([^"]*)"\s*$/.exec(rest);
         const specs = (wm ? rest.slice(0, wm.index) : rest).trim().split(/\s+/).filter(Boolean);
@@ -116,7 +116,7 @@ target MAIN "Main PCBA (board under test)"
           return { name, kind: 'range', range: r, unit: um[2] || '' };
         });
         cur.commands[m[1]] = { name: m[1], params, wire: wm ? wm[1] : '', returns: m[3] || null };
-      } else if ((m = /^telemetry\s+([a-z_]\w*)\s+(\S+)\s+"([^"]*)"\s*(.*)$/.exec(line))) {
+      } else if ((m = /^telemetry\s+([A-Za-z_]\w*)\s+(\S+)\s+"([^"]*)"\s*(.*)$/.exec(line))) {
         const t = { name: m[1], unit: m[2] === '-' ? '' : m[2], query: m[3], yellow: null, red: null };
         const lm = m[4].match(/(yellow|red)\s+(\S+)/g) || [];
         lm.forEach((x) => { const [k, r] = x.split(/\s+/); t[k] = parseRange(r); if (!t[k]) errors.push({ line: n, msg: 'Can\'t read limit ' + x }); });
@@ -265,7 +265,7 @@ suite Main PCBA
     return { lines, root, tests, nodes };
   }
 
-  const REF = '([A-Z][A-Z0-9_]*\\.[a-z_][\\w$]*|[a-z_]\\w*)';
+  const REF = '([A-Z][A-Z0-9_]*\\.[A-Za-z_][\\w$]*|[a-z_]\\w*)';
   function parseCond(s) {
     s = s.trim().replace(/\s*(?:\+\/-|\+-)\s*/g, ' ± '); // +/- and +- are ± for keyboards without it
     let m;
@@ -305,7 +305,7 @@ suite Main PCBA
 
   const KIND_LABEL = {
     command: 'Command', wait: 'Wait', until: 'Wait until', check: 'Check', measure: 'Measure', ask: 'Ask operator',
-    tell: 'Tell operator', log: 'Log', call: 'Call', repeat: 'Repeat', for: 'For each', script: 'Script', cleanup: 'Cleanup', bad: '?'
+    tell: 'Tell operator', log: 'Log', todo: 'To do', call: 'Call', repeat: 'Repeat', for: 'For each', script: 'Script', cleanup: 'Cleanup', bad: '?'
   };
 
   function parseStep(text) {
@@ -318,12 +318,13 @@ suite Main PCBA
     if ((m = new RegExp('^check ' + REF + '\\s+(.+)$').exec(text))) return { kind: 'check', ref: m[1], cond: parseCond(m[2]) };
     if ((m = new RegExp('^measure ' + REF + '\\s+as\\s+([a-z_]\\w*)$').exec(text))) return { kind: 'measure', ref: m[1], as: m[2] };
     if ((m = /^(ask|tell|log)\s+"(.*)"$/.exec(text))) return { kind: m[1], msg: m[2] };
+    if ((m = /^todo\s+"(.*)"$/.exec(text))) return { kind: 'todo', msg: m[1] };
     if ((m = /^call\s+(\S+)$/.exec(text))) return { kind: 'call', id: m[1] };
     if ((m = /^repeat\s+(\d+)$/.exec(text))) return { kind: 'repeat', n: +m[1] };
     if ((m = /^for\s+([a-z_]\w*)\s+in\s+(.+)$/.exec(text))) return { kind: 'for', v: m[1], items: m[2].split(',').map((s) => s.trim()).filter(Boolean) };
     if (text === 'script') return { kind: 'script' };
     if (text === 'cleanup') return { kind: 'cleanup' };
-    if ((m = /^([A-Z][A-Z0-9_]*)\.([a-z_][\w$]*)\s*(.*?)(?:\s*->\s*([a-z_]\w*))?$/.exec(text))) {
+    if ((m = /^([A-Z][A-Z0-9_]*)\.([A-Za-z_][\w$]*)\s*(.*?)(?:\s*->\s*([a-z_]\w*))?$/.exec(text))) {
       return { kind: 'command', target: m[1], cmd: m[2], args: tokenize(m[3]), into: m[4] || null };
     }
     return { kind: 'bad' };
@@ -649,6 +650,7 @@ suite Main PCBA
         }
         case 'measure': { const v = await readRef(s.ref, ctx); ctx.vars[s.as] = v; stepRes(n, { verdict: 'done', value: fmtV(v) }); break; }
         case 'log': log('info', s.msg); stepRes(n, { verdict: 'done' }); break;
+        case 'todo': ctx.todo = true; log('skip', 'Not written yet: ' + s.msg); stepRes(n, { verdict: 'skip', note: s.msg }); break;
         case 'tell': await operator(s.msg, [['OK', true]]); stepRes(n, { verdict: 'done' }); break;
         case 'ask': {
           const ok = await operator(s.msg, [['Yes', true], ['No', false]]);
@@ -760,7 +762,7 @@ suite Main PCBA
     log('head', test.id + ' ' + test.title);
     renderRows();
     let verdict = 'pass', note = '';
-    try { await execBlock(test.children, ctx, {}); if (ctx.failed) verdict = 'fail'; }
+    try { await execBlock(test.children, ctx, {}); if (ctx.failed) verdict = 'fail'; else if (ctx.todo) { verdict = 'skip'; note = 'Not written yet'; } }
     catch (e) {
       if (e instanceof Abort) { verdict = 'aborted'; note = 'Aborted'; }
       else if (e.message === 'timeout') verdict = 'fail';
@@ -923,7 +925,8 @@ suite Main PCBA
     repeat: 'Repeats the steps indented under it. $i is the count, 1 first.',
     for: 'Runs the steps indented under it once per item, with $name replaced by the item.',
     script: 'Python, for loops, searches, and math. cmd(), tlm(), wait(), log(), and record() reach the bench; record() keeps a value for a later check.',
-    cleanup: 'The steps indented under it always run when the test ends, even after a failure or Abort.'
+    cleanup: 'The steps indented under it always run when the test ends, even after a failure or Abort.',
+    todo: 'A step not written yet. The test skips, marked Not written yet, rather than passing with nothing checked.'
   };
 
   function pointList() {
@@ -1076,7 +1079,7 @@ suite Main PCBA
       case 'until': return 'wait until ' + v.ref + ' ' + cond() + ' within ' + qtyText(v.t, v.tu);
       case 'wait': return 'wait ' + qtyText(v.t, v.tu);
       case 'measure': return 'measure ' + v.ref + ' as ' + (String(v.as || '').trim().replace(/\W+/g, '_') || 'value');
-      case 'ask': case 'tell': case 'log': return v.kind + ' "' + unq(v.msg) + '"';
+      case 'ask': case 'tell': case 'log': case 'todo': return v.kind + ' "' + unq(v.msg) + '"';
       case 'call': return 'call ' + v.id;
       case 'repeat': return 'repeat ' + (parseInt(v.n, 10) || 1);
       case 'for': return 'for ' + (String(v.var || 'n').trim().replace(/\W+/g, '_')) + ' in ' + String(v.items || '').split(',').map((x) => x.trim()).filter(Boolean).join(', ');
@@ -1184,7 +1187,7 @@ suite Main PCBA
   const KEYWORDS = [
     ['check ', 'compare a value with a limit'], ['wait ', 'pause: wait 200 ms'], ['wait until ', 'wait for a condition … within 5 s'],
     ['measure ', 'keep a value: measure T.point as name'], ['ask "', 'yes or no question for the operator'], ['tell "', 'a message the operator acknowledges'],
-    ['log "', 'a note in the log'], ['call ', 'run another test’s steps'], ['repeat ', 'repeat the steps under it'], ['for ', 'for n in 1, 2 (then $n)'],
+    ['log "', 'a note in the log'], ['todo "', 'a step not written yet (the test skips)'], ['call ', 'run another test’s steps'], ['repeat ', 'repeat the steps under it'], ['for ', 'for n in 1, 2 (then $n)'],
     ['script', 'Python, indented under it'], ['cleanup', 'steps under it always run'], ['test ', 'test ID Title [REQ-…]'], ['group ', 'a group of tests'], ['suite ', 'a suite of groups']
   ];
   const AC = { items: [], hint: '', sel: 0, from: 0, to: 0, open: false };
@@ -1305,6 +1308,7 @@ suite Main PCBA
       row('until', 'wait until MAIN.state == "RUN" within 5 s', 'The same limits, checked every 100 ms; fails when the time runs out.') +
       row('wait', 'wait 200 ms', 'ms or s.') +
       row('measure', 'measure MAIN.temp as board_temp', 'Keeps a value under a name, with no limit.') +
+      row('todo', 'todo "Read the fault flags once bit conditions exist"', 'A placeholder for a step not written yet: the test skips, marked <b>Not written yet</b>, so a stub never passes.') +
       row('ask', 'ask "Is the LED green?"', 'Yes or No for the operator; No fails the test. <code>tell</code> and <code>log</code> work the same way.') +
       row('call', 'call PWR-01', 'Runs that test’s steps here; its cleanup waits until this test ends.') +
       row('repeat', 'repeat 3', 'Repeats the indented steps; <code>$i</code> is the count.') +
