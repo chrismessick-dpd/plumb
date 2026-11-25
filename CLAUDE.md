@@ -20,8 +20,20 @@ Use American English and the serial comma. Chris is colorblind: use the suite's 
   development). People, invitations, and the sidebar foot load from the hub (`../signoff/assets/`).
 - `tools/stamp_version.py`: writes `assets/version.js` (`PLUMB.VERSION`); an open page reloads itself when the
   site serves another (`checkForUpdate`). Run it after any change to `index.html` or `assets/`.
-- `tests/test.html`: sync tests against `tests/fake-github.js` (copied from Fabcheck). Serve the tools folder
-  (preview `signoff-suite-alt`, port 8774); the page title becomes PASS, FAIL, or ERROR. 24 tests.
+- `tests/test.html`: sync tests against `tests/fake-github.js` (copied from Fabcheck), and the conformance check
+  against the bridge's parser (`tests/conformance.js`, `corpus.json`, `python.json`). Serve the tools folder
+  (preview `signoff-suite-alt`, port 8774); the page title becomes PASS, FAIL, or ERROR. 32 tests. It loads
+  `assets/app.js` with `tests/no-ui.js` first (`PLUMB_NO_UI`), so only `PLUMB.lang` (the parser) comes up.
+- `bridge/`: **the bench bridge** (2026-11-24, Chris: the bridge runs the tests; nothing installed by hand, no VISA).
+  `python bridge/run.py` sets up `bridge/.venv` (websockets, pyserial, pinned in `requirements.txt`) and serves the
+  page on `ws://127.0.0.1:47615` (Origin allowlist plus a pairing code in `bridge/.pairing`). `plumb_bridge/lang.py`
+  is a line-for-line port of the page's parser; `runner.py` of its runner; `ifaces.py` has SCPI over LAN, serial
+  lines, and the JSON + CRC device; `sims.py` a SCPI supply and a JSON + CRC thermostat board; `server.py` the
+  WebSocket; `cli.py` `serve`, `run`, `check`, `sim`, `conformance`. Tests: `python -m pytest bridge/tests` (9).
+  Everything is in `docs/bridge.md`. **A step-language change goes into both parsers**, then `python -m
+  plumb_bridge conformance` (from `bridge/`) and the test page. The page's side (`BR`, `brConnect`, `brMsg` in
+  `app.js`): the bench panel's Bridge row connects and pairs; while connected, Run goes to the bridge, and its
+  events draw on the same rows (step results by line index), its operator questions in the page's dialog.
 - `docs/generator-suite.md`: the survey of a real pytest acceptance suite against Plumb, the plan, and Chris's
   decisions. The real mapping (client names) is private: `C:/Dovetail/scratch/plumb-generator/mapping.md`.
 
@@ -82,10 +94,11 @@ copy that changed since it last wrote).
    relaxed-limit and probe-stimulus runs count, labeled).
 3. Stored runs in `plumb_data`.
 4. The step-language growth in `docs/generator-suite.md` section 3, and pytest import and export (section 1).
-5. The bench bridge (Python, localhost WebSocket); the bridge always owns the device's port (Chris).
+5. The bench bridge's next pieces (`docs/bridge.md`, *Not yet*): the Bench and Telemetry tabs reading the bridge
+   while it's connected, USBTMC and sigrok, `bridge.*` calls for probes and drives, and the first real hardware.
+   The page never drives hardware itself (it simulates or hands the run to the bridge), so an energizing test
+   always runs in the bridge.
 6. A hub link only when Chris says so.
-6a. Before any interface is real: a test that energizes a load (the client bench's heating group) must refuse to run
-   in the page and run from the bridge. Today only a group comment says so, and nothing enforces it.
 7. Sign out leaves `plumb.v1.*` benches in the browser. Adding `plumb.v1.` to `SUITE_NS` means changing EE's
    `app.js` and the hub's `sidefoot.js` together (keep them in step); for Chris to sequence.
 

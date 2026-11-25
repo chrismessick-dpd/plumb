@@ -1,0 +1,3 @@
+# The bench bridge's packages, pinned. run.py installs them into bridge/.venv, never system-wide.
+websockets==15.0.1
+pyserial==3.5

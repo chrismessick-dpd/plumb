@@ -831,6 +831,7 @@ suite Main PCBA
 
   async function run(tests) {
     if (S.running) return;
+    if (brLive()) return brRun(tests);
     S.running = true; S.abort = false;
     $('#abort').disabled = false; $('#run-all').disabled = true; $('#script').readOnly = true;
     renderRows();
@@ -842,6 +843,115 @@ suite Main PCBA
     }
   }
   const testsUnder = (n) => (n.kind === 'test' ? [n] : n.children.flatMap(testsUnder));
+
+
+  /* ---------- The bench bridge: real targets, run by the Python bridge on this PC (bridge/run.py) ---------- */
+  // The page sends the open bench and asks for a run; the bridge runs it and sends back what the rows show. A run
+  // goes on if this page closes, and a page that comes back gets its events so far and any question still waiting.
+  const BRIDGE_URL = 'ws://127.0.0.1:47615', BRIDGE_TOKEN = 'plumb.v1.bridge.token';
+  const BR = { ws: null, state: 'off', want: false, targets: {}, hash: null, loadWait: null, running: false, retry: 0 };
+  function brToken() { try { return localStorage.getItem(BRIDGE_TOKEN) || ''; } catch (e) { return ''; } }
+  function brSend(m) { if (BR.ws && BR.ws.readyState === 1) BR.ws.send(JSON.stringify(m)); }
+  function brLive() { return BR.state === 'live'; }
+  async function brHash(defs, script) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(defs + '\n\u0000\n' + script));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  function brSetState(st) { BR.state = st; renderBridge(); renderAttach(); }
+  function brConnect() {
+    BR.want = true;
+    if (BR.ws && BR.ws.readyState <= 1) return;
+    brSetState('connecting');
+    let ws;
+    try { ws = new WebSocket(BRIDGE_URL); } catch (e) { brSetState('off'); return; }
+    BR.ws = ws;
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', token: brToken() }));
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } brMsg(m); };
+    ws.onclose = (e) => {
+      if (BR.ws !== ws) return;
+      BR.ws = null;
+      if (e.code === 4401 || BR.state === 'pair') { brSetState('pair'); return; }
+      if (BR.running) log('info', 'Lost the bench bridge; the run carries on there. Reconnecting…');
+      brSetState(BR.want ? 'connecting' : 'off');
+      if (BR.want) { clearTimeout(BR.retry); BR.retry = setTimeout(brConnect, 3000); }
+    };
+  }
+  function brDisconnect() {
+    BR.want = false; clearTimeout(BR.retry);
+    if (BR.ws) { const w = BR.ws; BR.ws = null; w.close(); }
+    brSetState('off');
+  }
+  function brPair(code) {
+    try { localStorage.setItem(BRIDGE_TOKEN, String(code).trim()); } catch (e) { /* storage off */ }
+    brSetState('connecting'); brConnect();
+  }
+  function brLoad() {
+    if (!brLive() || !CUR) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      BR.loadWait = resolve;
+      brSend({ type: 'load', bench: { id: CUR, name: (ST.get(CUR) || { meta: {} }).meta.name, defs: S.defsText, script: S.text } });
+    });
+  }
+  let brLoadTimer = 0;
+  function brLoadSoon() { if (!brLive() || BR.running) return; clearTimeout(brLoadTimer); brLoadTimer = setTimeout(brLoad, 600); }
+  function brRunStarted() {
+    BR.running = true; S.running = true; S.abort = false;
+    $('#abort').disabled = false; $('#run-all').disabled = true; $('#script').readOnly = true;
+    renderRows();
+  }
+  // The bridge answered its own question (Abort, or the run ended): the dialog goes without sending an answer.
+  function brCloseAsk() { BR.ask = null; $('#modal').hidden = true; $('#modal-btns').onclick = null; }
+  function brRunEnded() {
+    if (BR.ask != null) brCloseAsk();
+    BR.running = false; S.running = false; S.abort = false; S.current = null;
+    $('#abort').disabled = true; $('#run-all').disabled = false; $('#script').readOnly = false;
+    renderRows(); renderSummary(); renderEvidence();
+  }
+  async function brRun(tests) {
+    const loaded = await brLoad();
+    if (!loaded) return;
+    const mine = await brHash(S.defsText, S.text);
+    if (mine !== BR.hash) { toast('The bridge has another copy of this bench; try again'); return; }
+    brSend({ type: 'run', ids: tests.map((t) => t.id), hash: mine });
+  }
+  function brMsg(m) {
+    switch (m.type) {
+      case 'unpaired': BR.state = 'pair'; renderBridge(); break;
+      case 'ready':
+        brSetState('live'); log('info', 'Bench bridge ' + m.version + ' connected: runs go to the real targets');
+        if (m.running) brRunStarted(); else brLoad();
+        break;
+      case 'loaded': case 'targets':
+        BR.targets = m.targets || {}; if (m.hash) BR.hash = m.hash; renderAttach();
+        if (BR.loadWait) { const r = BR.loadWait; BR.loadWait = null; r(m); }
+        break;
+      case 'log': log(m.kind, m.text); break;
+      case 'current': S.current = m.idx; renderRows(); break;
+      case 'step': { const n = S.tree && S.tree.nodes.find((x) => x.idx === m.idx); if (n) stepRes(n, { verdict: m.verdict, value: m.value, limit: m.limit, note: m.note }); break; }
+      case 'test': {
+        const r = Object.assign({}, m.result);
+        if (r.verdict === 'running') { S.runId = (S.runId || 0) + 1; X.marks.push({ t: now(), label: m.id }); }
+        if (r.at) r.at = Math.round(r.at * 1000);
+        S.results[m.id] = r; renderRows(); if (r.verdict !== 'running') { renderEvidence(); renderSummary(); }
+        break;
+      }
+      case 'run': if (m.state === 'started') brRunStarted(); else brRunEnded(); break;
+      case 'ask': BR.ask = m.id; operator(m.msg, m.choices).then((v) => { BR.ask = null; brSend({ type: 'answer', id: m.id, value: v }); }, () => {}); break;
+      case 'ask-done': if (BR.ask === m.id) brCloseAsk(); break;
+      case 'error': toast('Bench bridge: ' + m.msg); log('error', 'Bench bridge: ' + m.msg); break;
+    }
+  }
+  function renderBridge() {
+    const el = $('#bridge-row'); if (!el) return;
+    const st = BR.state;
+    const label = { off: 'Not connected', connecting: 'Connecting…', pair: 'Needs pairing', live: 'Connected' }[st];
+    el.innerHTML = '<span class="tb-chip' + (st === 'live' ? '' : ' off') + '" title="The bench bridge runs tests on real targets from this PC: python bridge/run.py">' + (st === 'live' ? '✓ ' : '') + label + '</span>' +
+      (st === 'pair' ? '<input class="tb-pin tb-bridge-code" id="bridge-code" placeholder="Code" inputmode="numeric" autocomplete="off" title="The pairing code the bridge printed when it started"><button class="btn btn-plain" id="bridge-pair">Pair</button>' : '') +
+      '<button class="btn btn-plain" id="bridge-btn">' + (st === 'off' ? 'Connect' : 'Disconnect') + '</button>';
+    $('.tb-labctl-head').textContent = st === 'live' ? 'Bench bridge' : 'Simulated bench';
+    $('#ctl-fault-row').hidden = st === 'live';
+    $('#runs-note').textContent = st === 'live' ? 'Runs go to the real targets through the bench bridge' : 'Runs are simulated until you connect the bench bridge';
+  }
 
   /* ---------- Rendering: rows ---------- */
 
@@ -2297,6 +2407,15 @@ suite Main PCBA
     $('#tests-wrap').dataset.view = v;
   }
   function renderAttach() {
+    if (brLive()) {
+      $('#ctl-attach').innerHTML = Object.keys((S.defs && S.defs.targets) || {}).map((k) => {
+        const t = BR.targets[k];
+        const live = t && t.ok && !t.waiting;
+        const tip = !t ? 'Not checked yet' : t.waiting ? k + ': ' + t.reason : t.ok ? 'The bridge reaches ' + k : k + ': ' + t.reason;
+        return '<span class="tb-chip' + (live ? '' : ' off') + '" title="' + esc(tip) + '">' + (live ? '✓ ' : t && t.waiting ? '… ' : '') + esc(k) + '</span>';
+      }).join('');
+      return;
+    }
     // Only the open bench's targets; sim.attached keeps the rest, so switching back finds them as they were.
     $('#ctl-attach').innerHTML = Object.keys((S.defs && S.defs.targets) || {}).map((k) => '<button class="tb-chip tb-chip-btn' + (sim.attached[k] ? '' : ' off') + '" data-t="' + k + '" title="Simulated: attach or detach ' + k + '">' + (sim.attached[k] ? '✓ ' : '') + k + '</button>').join('');
   }
@@ -2334,7 +2453,13 @@ suite Main PCBA
       renderAttach(); renderRows(); if (!$('[data-pane="bench"]').hidden) renderTargets();
     });
     $('#run-all').addEventListener('click', () => { if (CUR) run(testsUnder(S.tree.root)); });
-    $('#abort').addEventListener('click', () => { S.abort = true; log('info', 'Abort: stopping, then cleanup'); });
+    $('#abort').addEventListener('click', () => { if (BR.running) { brSend({ type: 'abort' }); return; } S.abort = true; log('info', 'Abort: stopping, then cleanup'); });
+    $('#bridge-row').addEventListener('click', (e) => {
+      if (e.target.id === 'bridge-btn') { BR.state === 'off' ? brConnect() : brDisconnect(); }
+      if (e.target.id === 'bridge-pair') { const v = $('#bridge-code').value.trim(); if (v) brPair(v); }
+    });
+    $('#bridge-row').addEventListener('keydown', (e) => { if (e.target.id === 'bridge-code' && e.key === 'Enter') { const v = e.target.value.trim(); if (v) brPair(v); } });
+    renderBridge();
     $('#log-clear').addEventListener('click', () => { S.log = []; renderLog(); });
 
     let deb = 0;
@@ -2456,6 +2581,7 @@ suite Main PCBA
     S.defs = parseDefs(S.defsText);
     Object.keys(S.defs.targets).forEach((k) => { if (!(k in sim.attached)) sim.attached[k] = false; });
     renderAttach();
+    brLoadSoon();
   }
 
   function start() {
@@ -2500,5 +2626,8 @@ suite Main PCBA
     log('info', 'Simulated bench: PSU, SCOPE, LOGIC, and MAIN attached. Real instruments need the bench bridge (to come).');
     window.TBLab = { S, X, sim, drawPlot, parseScript, serialize, parseStep, parseQty, fmtQty, lint, run, testsUnder, openProject, ST };
   }
-  start();
+  // The step language without the page, for the test page's conformance check against the bench bridge's parser.
+  window.PLUMB = window.PLUMB || {};
+  window.PLUMB.lang = { parseQty, parseCond, condText, condPass, parseStep, parseDefs, parseScript, serialize, lint, needsOf, subtreeEnd, fmtQty, trimNum, DEFAULT_DEFS, DEFAULT_SCRIPT };
+  if (!window.PLUMB_NO_UI) start();
 })();

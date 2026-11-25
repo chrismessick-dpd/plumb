@@ -1,0 +1,27 @@
+{
+  "qty": ["40 mA", "24 V", "3.3V", "-50 mA", "+1.5e3 Hz", ".5 s", "500 ms", "12 kHz", "2 MHz", "10 µA", "10 uA", "1 kΩ", "37 °C", "20 %", "115200 baud",
+          "7", "0.2", "abc", "5 mV", "1 nF", "3 mΩ", "", "1e-3", "1 m", "24  V", "-0 V"],
+  "cond": ["< 50 mV", "<= 0.2", "> 0 s", ">= 2 A", "== 1", "= 1", "== \"IDLE\"", "= \"a b\"", "contains \"self-test OK\"",
+           "40 mA .. 90 mA", "-50 mA .. 50 mA", "15 °C .. 35 °C", "3.3 V ±3%", "3.3 V +/- 3%", "5 ms ±0.5 ms", "22400 ±10%", "10 s +- 2%",
+           "1 ..", "nonsense", "< abc", "24 V ± x", "-2 °C .. 2 °C", "0.5"],
+  "condPass": [["< 50 mV", 0.04], ["< 50 mV", 0.05], ["40 mA .. 90 mA", 0.09], ["40 mA .. 90 mA", 0.0901], ["== 1", 1], ["== 1", 1.0000000001],
+               ["== \"IDLE\"", "IDLE"], ["== \"IDLE\"", "RUN"], ["== \"5\"", 5], ["== 5", "5"], ["contains \"OK\"", "self-test OK"], ["contains \"OK\"", 3],
+               ["> 0 s", 0], [">= 2 A", 2], ["3.3 V ±3%", 3.399], ["3.3 V ±3%", 3.4], ["< 1", "0.5"], ["<= 0.2", 0.2]],
+  "steps": ["PSU.set_voltage 24 V", "PSU.output on", "SCOPE.measure 1 vpp -> ripple", "MAIN.relay $n on", "PSU.set_voltage $v0 V",
+            "DEV.setParams \"setpoint=45 slope=40\" -> ack", "DEV.halt", "DEV.setMode 1 0 -> ack",
+            "wait 200 ms", "wait 2 s", "wait soon", "wait until MAIN.state == \"RUN\" within 5 s", "wait until DEV.temp > 44 °C within 15 s",
+            "wait until x == 1 within 3", "check PSU.current 40 mA .. 90 mA", "check MAIN.relay$n == \"closed\"", "check ripple < 50 mV",
+            "check DEV.fault_A == 1", "measure MAIN.temp as board_temp", "measure PSU.current as Idle", "ask \"Is the LED green?\"",
+            "tell \"Press it\"", "log \"hi\"", "todo \"Write it\"", "call PWR-01", "repeat 3", "for n in 1, 2", "for v in 22.5, 24 , 25.5",
+            "script", "script on bridge", "cleanup", "frobnicate", "psu.output on", "PSU.output", "check", "DEV.Gain 0.5"],
+  "fmt": [[0.04, "A"], [24, "V"], [0.0005, "s"], [12000, "Hz"], [2000000, "Hz"], [0, "V"], [37.25, "°C"], [3, ""], [1.23456, ""], [0.000001234, "A"],
+          [12000, "W"], [-0.05, "A"], [22400, ""], [0.1, "%"]],
+  "trim": [[0.00005, 6], [24, 6], [0.123456789, 6], [123456789, 6], [1e-7, 6], [1.5e21, 6], [3.3, 4], [0.0001234, 4], [99999.5, 4], [2.5, 1]],
+  "benches": [
+    {"name": "synthetic",
+     "defs": "# A comment\ntarget PSU \"Supply\"\n  interface lan 10.0.0.7:5025 scpi\n  command output state=on|off \"OUTP {state}\"\n  command set_voltage v=0..30V \"VOLT {v}\"\n  command bad x=?? \"X\"\n  command any a b=1..=2 \"A {a}\" -> value\n  telemetry voltage V \"MEAS:VOLT?\" yellow 0..25 red 0..28\n  telemetry current A \"MEAS:CURR?\"  # trailing note\n  telemetry nope V \"Q\" yellow x..y\n  what is this\ntarget DEV \"Device\"\n  interface serial socket://127.0.0.1:9001 json-crc16\n  command ping \"msg ping\" -> ack\n  telemetry state - \"field state\"\n  telemetry fault_A - \"bit faultFlags 5\"\n  telemetry temp °C \"field temp ÷10\"\n",
+     "script": "# header comment\n\nsuite S\n  group One\n    test T-01 First [REQ-1, REQ-2]\n      PSU.set_voltage 24 V\n      PSU.output on\n      measure PSU.voltage as v0\n      PSU.set_voltage $v0 V\n      check PSU.voltage 24 V ±2%\n      check DEV.temp 20 °C .. 30 °C\n      check DEV.temp 2 V .. 3 V\n      check DEV.missing == 1\n      check nothing == 1\n      wait until DEV.state == \"IDLE\" within 5 s\n      wait until DEV.state == \"IDLE\"\n      wait soon\n      cleanup\n        PSU.output off\n        DEV.ping -> ack\n    test T-02 Second\n      call T-01\n      call T-99\n      for n in 1, 2\n        DEV.ping\n        repeat 2\n          log \"loop\"\n      script\n        x = tlm('DEV.state')\n\n        record('got', 1)\n      check got == 1\n      script on bridge\n        import os\n        record('b', 2, 'V')\n      check b < 3 V\n      todo \"later\"\n      NOPE.thing\n      PSU.nothing 1\n      PSU.set_voltage 1 2\n      frobnicate\n  test T-03 Directly in a suite\n    log \"ok\"\n  log \"a step outside a test\"\ngroup Loose\n  test T-04 No suite   \n    ask \"Fine?\"\n"},
+    {"name": "empty", "defs": "", "script": ""},
+    {"name": "no-trailing-newline", "defs": "target X \"x\"", "script": "suite A\n  test A-1 One\n    log \"x\""}
+  ]
+}

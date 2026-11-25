@@ -16,6 +16,9 @@
 .tb-labctl-head { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
 .tb-ctl-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); font-weight: 600; }
 .tb-ctl-row > span:first-child { width: 58px; }
+.tb-bridge { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tb-bridge .btn { padding: 1px 8px; font-size: 12px; }
+.tb-bridge-code { width: 70px; }
 .tb-attach { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .tb-select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--bg-elev); border: 1px solid var(--hair-2); border-radius: 7px; padding: 4px 6px; }
 @media (max-width: 1100px) { .toolbar .seg button { padding: 5px 8px; } }

@@ -6,7 +6,7 @@
      board, kept in this browser and synced with the private plumb_data repo through api.github.com when signed in.
      Runs are simulated until the local bridge exists; the demo is the made-up Smart Thermostat (Acme Climate).
      Script steps load Pyodide from jsDelivr inside their Worker (an open decision: host it, or allow the CDN). -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self' https://api.github.com https://signoff-auth.misty-dawn-b371.workers.dev https://signoff-auth-dev.misty-dawn-b371.workers.dev; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; connect-src 'self' https://api.github.com https://signoff-auth.misty-dawn-b371.workers.dev https://signoff-auth-dev.misty-dawn-b371.workers.dev ws://127.0.0.1:47615 ws://localhost:47615; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light dark">
 <title>Plumb · Bench tests</title>
@@ -114,12 +114,13 @@
         <div class="page-head-text">
           <div class="eyebrow" id="bench-eyebrow"></div>
           <h1 class="page-title"><span id="bench-title"></span> <button class="btn btn-plain tb-edit-bench" data-act="edit-bench" title="Name, client project, and the Signoff EE board this bench tests">Details</button></h1>
-          <div class="page-sub"><span id="bench-sub"></span><span class="sep">·</span><span id="bench-board"></span><span class="sep">·</span><span class="tb-dim">Runs are simulated until the bench bridge exists</span></div>
+          <div class="page-sub"><span id="bench-sub"></span><span class="sep">·</span><span id="bench-board"></span><span class="sep">·</span><span class="tb-dim" id="runs-note">Runs are simulated until you connect the bench bridge</span></div>
         </div>
-        <div class="card tb-labctl" title="Simulated: these switches stand in for real hardware until the bench bridge exists">
+        <div class="card tb-labctl">
           <div class="tb-labctl-head">Simulated bench</div>
+          <div class="tb-ctl-row"><span>Bridge</span><span class="tb-bridge" id="bridge-row"></span></div>
           <label class="tb-ctl-row"><span>Attached</span><span class="tb-attach" id="ctl-attach"></span></label>
-          <label class="tb-ctl-row"><span>Fault</span>
+          <label class="tb-ctl-row" id="ctl-fault-row"><span>Fault</span>
             <select id="ctl-fault" class="tb-select">
               <option value="none">None</option>
               <option value="idle">High idle current</option>

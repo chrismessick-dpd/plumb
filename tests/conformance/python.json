@@ -1,0 +1,3037 @@
+{
+ "benches": [
+  {
+   "defs": {
+    "errors": [],
+    "targets": {
+     "LOGIC": {
+      "commands": {
+       "arm": {
+        "name": "arm",
+        "params": [
+         {
+          "choices": [
+           "uart",
+           "i2c"
+          ],
+          "kind": "choice",
+          "name": "proto"
+         },
+         {
+          "kind": "any",
+          "name": "rate"
+         }
+        ],
+        "returns": null,
+        "wire": "arm {proto} {rate}"
+       },
+       "read": {
+        "name": "read",
+        "params": [],
+        "returns": "text",
+        "wire": "read"
+       }
+      },
+      "iface": {
+       "parts": [
+        "sigrok",
+        "fx2lafw"
+       ],
+       "text": "usb sigrok fx2lafw",
+       "type": "usb"
+      },
+      "name": "LOGIC",
+      "order": [],
+      "telemetry": {},
+      "title": "Logic analyzer"
+     },
+     "MAIN": {
+      "commands": {
+       "reboot": {
+        "name": "reboot",
+        "params": [],
+        "returns": null,
+        "wire": "reboot"
+       },
+       "relay": {
+        "name": "relay",
+        "params": [
+         {
+          "kind": "range",
+          "name": "n",
+          "range": [
+           1.0,
+           2.0
+          ],
+          "unit": ""
+         },
+         {
+          "choices": [
+           "on",
+           "off"
+          ],
+          "kind": "choice",
+          "name": "state"
+         }
+        ],
+        "returns": null,
+        "wire": "relay {n} {state}"
+       },
+       "set_point": {
+        "name": "set_point",
+        "params": [
+         {
+          "kind": "range",
+          "name": "t",
+          "range": [
+           5.0,
+           35.0
+          ],
+          "unit": "°C"
+         }
+        ],
+        "returns": null,
+        "wire": "setpoint {t}"
+       }
+      },
+      "iface": {
+       "parts": [
+        "COM7",
+        "115200",
+        "line"
+       ],
+       "text": "serial COM7 115200 line",
+       "type": "serial"
+      },
+      "name": "MAIN",
+      "order": [
+       "state",
+       "fw_version",
+       "rail_3v3",
+       "temp",
+       "relay1",
+       "relay2"
+      ],
+      "telemetry": {
+       "fw_version": {
+        "name": "fw_version",
+        "query": "version?",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "rail_3v3": {
+        "name": "rail_3v3",
+        "query": "status?",
+        "red": [
+         3.1,
+         3.5
+        ],
+        "unit": "V",
+        "yellow": [
+         3.2,
+         3.4
+        ]
+       },
+       "relay1": {
+        "name": "relay1",
+        "query": "status?",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "relay2": {
+        "name": "relay2",
+        "query": "status?",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "state": {
+        "name": "state",
+        "query": "status?",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "temp": {
+        "name": "temp",
+        "query": "status?",
+        "red": [
+         0.0,
+         60.0
+        ],
+        "unit": "°C",
+        "yellow": [
+         0.0,
+         45.0
+        ]
+       }
+      },
+      "title": "Main PCBA (board under test)"
+     },
+     "PSU": {
+      "commands": {
+       "output": {
+        "name": "output",
+        "params": [
+         {
+          "choices": [
+           "on",
+           "off"
+          ],
+          "kind": "choice",
+          "name": "state"
+         }
+        ],
+        "returns": null,
+        "wire": "OUTP {state}"
+       },
+       "set_current_limit": {
+        "name": "set_current_limit",
+        "params": [
+         {
+          "kind": "range",
+          "name": "i",
+          "range": [
+           0.0,
+           3.0
+          ],
+          "unit": "A"
+         }
+        ],
+        "returns": null,
+        "wire": "CURR {i}"
+       },
+       "set_voltage": {
+        "name": "set_voltage",
+        "params": [
+         {
+          "kind": "range",
+          "name": "v",
+          "range": [
+           0.0,
+           30.0
+          ],
+          "unit": "V"
+         }
+        ],
+        "returns": null,
+        "wire": "VOLT {v}"
+       }
+      },
+      "iface": {
+       "parts": [
+        "192.168.1.40:5025",
+        "scpi"
+       ],
+       "text": "lan 192.168.1.40:5025 scpi",
+       "type": "lan"
+      },
+      "name": "PSU",
+      "order": [
+       "voltage",
+       "current"
+      ],
+      "telemetry": {
+       "current": {
+        "name": "current",
+        "query": "MEAS:CURR?",
+        "red": [
+         0.0,
+         0.5
+        ],
+        "unit": "A",
+        "yellow": [
+         0.0,
+         0.4
+        ]
+       },
+       "voltage": {
+        "name": "voltage",
+        "query": "MEAS:VOLT?",
+        "red": null,
+        "unit": "V",
+        "yellow": null
+       }
+      },
+      "title": "Bench power supply"
+     },
+     "SCOPE": {
+      "commands": {
+       "autoscale": {
+        "name": "autoscale",
+        "params": [],
+        "returns": null,
+        "wire": ":AUT"
+       },
+       "measure": {
+        "name": "measure",
+        "params": [
+         {
+          "kind": "range",
+          "name": "ch",
+          "range": [
+           1.0,
+           4.0
+          ],
+          "unit": ""
+         },
+         {
+          "choices": [
+           "vpp",
+           "freq",
+           "mean",
+           "duty"
+          ],
+          "kind": "choice",
+          "name": "what"
+         }
+        ],
+        "returns": "value",
+        "wire": ":MEAS:ITEM? {what},CHAN{ch}"
+       }
+      },
+      "iface": {
+       "parts": [
+        "usbtmc",
+        "1AB1:04CE"
+       ],
+       "text": "usb usbtmc 1AB1:04CE",
+       "type": "usb"
+      },
+      "name": "SCOPE",
+      "order": [
+       "ch1_vpp",
+       "ch2_freq"
+      ],
+      "telemetry": {
+       "ch1_vpp": {
+        "name": "ch1_vpp",
+        "query": ":MEAS:ITEM? VPP,CHAN1",
+        "red": [
+         0.0,
+         0.05
+        ],
+        "unit": "V",
+        "yellow": [
+         0.0,
+         0.04
+        ]
+       },
+       "ch2_freq": {
+        "name": "ch2_freq",
+        "query": ":MEAS:ITEM? FREQ,CHAN2",
+        "red": null,
+        "unit": "Hz",
+        "yellow": null
+       }
+      },
+      "title": "Oscilloscope"
+     }
+    }
+   },
+   "name": "demo",
+   "script": {
+    "ends": [
+     74,
+     44,
+     14,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     14,
+     14,
+     24,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     24,
+     23,
+     24,
+     44,
+     26,
+     41,
+     42,
+     44,
+     44,
+     64,
+     51,
+     47,
+     48,
+     49,
+     50,
+     51,
+     60,
+     53,
+     60,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     64,
+     62,
+     63,
+     64,
+     74,
+     69,
+     67,
+     68,
+     69,
+     74,
+     71,
+     72,
+     73,
+     74
+    ],
+    "exact": true,
+    "issues": {},
+    "lines": [
+     {
+      "lead": 0,
+      "text": "# Smart Thermostat · Main PCBA bench tests (made-up demo)"
+     },
+     {
+      "lead": 0,
+      "text": "# One step per line; indent to nest. The rows and this text are the same thing."
+     },
+     {
+      "lead": 0,
+      "text": ""
+     },
+     {
+      "lead": 0,
+      "text": "suite Main PCBA"
+     },
+     {
+      "lead": 2,
+      "text": "group Power"
+     },
+     {
+      "lead": 4,
+      "text": "test PWR-01 Powers up at 24 V [REQ-004]"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.set_current_limit 500 mA"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.set_voltage 24 V"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.output on"
+     },
+     {
+      "lead": 6,
+      "text": "wait until MAIN.state == \"RUN\" within 5 s"
+     },
+     {
+      "lead": 6,
+      "text": "check PSU.current 40 mA .. 90 mA"
+     },
+     {
+      "lead": 6,
+      "text": "check MAIN.rail_3v3 3.3 V ±3%"
+     },
+     {
+      "lead": 6,
+      "text": "cleanup"
+     },
+     {
+      "lead": 8,
+      "text": "PSU.output off"
+     },
+     {
+      "lead": 4,
+      "text": "test PWR-02 3V3 ripple with both relays on [REQ-005]"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "MAIN.relay 1 on"
+     },
+     {
+      "lead": 6,
+      "text": "MAIN.relay 2 on"
+     },
+     {
+      "lead": 6,
+      "text": "wait 200 ms"
+     },
+     {
+      "lead": 6,
+      "text": "SCOPE.measure 1 vpp -> ripple"
+     },
+     {
+      "lead": 6,
+      "text": "check ripple < 50 mV"
+     },
+     {
+      "lead": 6,
+      "text": "cleanup"
+     },
+     {
+      "lead": 8,
+      "text": "MAIN.relay 1 off"
+     },
+     {
+      "lead": 8,
+      "text": "MAIN.relay 2 off"
+     },
+     {
+      "lead": 4,
+      "text": "test PWR-03 Brown-out threshold [REQ-006]"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "script"
+     },
+     {
+      "lead": 8,
+      "text": "# Step the supply down until the board stops answering RUN."
+     },
+     {
+      "lead": 8,
+      "text": "v = 24.0"
+     },
+     {
+      "lead": 8,
+      "text": "while v > 6:"
+     },
+     {
+      "lead": 12,
+      "text": "v -= 0.5"
+     },
+     {
+      "lead": 12,
+      "text": "cmd('PSU.set_voltage', f'{v} V')"
+     },
+     {
+      "lead": 12,
+      "text": "wait(150)"
+     },
+     {
+      "lead": 12,
+      "text": "try:"
+     },
+     {
+      "lead": 16,
+      "text": "state = tlm('MAIN.state')"
+     },
+     {
+      "lead": 12,
+      "text": "except Exception:"
+     },
+     {
+      "lead": 16,
+      "text": "state = 'OFF'"
+     },
+     {
+      "lead": 12,
+      "text": "if state != 'RUN':"
+     },
+     {
+      "lead": 16,
+      "text": "break"
+     },
+     {
+      "lead": 8,
+      "text": "record('brownout', v, 'V')"
+     },
+     {
+      "lead": 8,
+      "text": "log(f'Board dropped out at {v} V')"
+     },
+     {
+      "lead": 6,
+      "text": "check brownout < 9 V"
+     },
+     {
+      "lead": 6,
+      "text": "cleanup"
+     },
+     {
+      "lead": 8,
+      "text": "PSU.set_voltage 24 V"
+     },
+     {
+      "lead": 2,
+      "text": "group Firmware"
+     },
+     {
+      "lead": 4,
+      "text": "test FW-01 Boot banner on the debug UART [REQ-011]"
+     },
+     {
+      "lead": 6,
+      "text": "LOGIC.arm uart 115200"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "LOGIC.read -> banner"
+     },
+     {
+      "lead": 6,
+      "text": "check banner contains \"self-test OK\""
+     },
+     {
+      "lead": 6,
+      "text": "check MAIN.fw_version == \"1.4.2\""
+     },
+     {
+      "lead": 4,
+      "text": "test FW-02 Relays follow commands [REQ-012]"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "for n in 1, 2"
+     },
+     {
+      "lead": 8,
+      "text": "MAIN.relay $n on"
+     },
+     {
+      "lead": 8,
+      "text": "wait 50 ms"
+     },
+     {
+      "lead": 8,
+      "text": "check MAIN.relay$n == \"closed\""
+     },
+     {
+      "lead": 8,
+      "text": "MAIN.relay $n off"
+     },
+     {
+      "lead": 8,
+      "text": "wait 50 ms"
+     },
+     {
+      "lead": 8,
+      "text": "check MAIN.relay$n == \"open\""
+     },
+     {
+      "lead": 4,
+      "text": "test FW-03 Backlight PWM frequency"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "SCOPE.measure 2 freq -> pwm"
+     },
+     {
+      "lead": 6,
+      "text": "check pwm 20 kHz ±5%"
+     },
+     {
+      "lead": 2,
+      "text": "group Operator"
+     },
+     {
+      "lead": 4,
+      "text": "test UI-01 Display shows the set point [REQ-020]"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "MAIN.set_point 21.5 °C"
+     },
+     {
+      "lead": 6,
+      "text": "ask \"Does the display read 21.5 °C?\""
+     },
+     {
+      "lead": 4,
+      "text": "test UI-02 Board temperature after warm-up"
+     },
+     {
+      "lead": 6,
+      "text": "call PWR-01"
+     },
+     {
+      "lead": 6,
+      "text": "wait 2 s"
+     },
+     {
+      "lead": 6,
+      "text": "measure MAIN.temp as board_temp"
+     },
+     {
+      "lead": 6,
+      "text": "check board_temp < 45 °C"
+     }
+    ],
+    "needs": {
+     "FW-01": [
+      "LOGIC",
+      "MAIN",
+      "PSU"
+     ],
+     "FW-02": [
+      "MAIN",
+      "PSU"
+     ],
+     "FW-03": [
+      "MAIN",
+      "PSU",
+      "SCOPE"
+     ],
+     "PWR-01": [
+      "MAIN",
+      "PSU"
+     ],
+     "PWR-02": [
+      "MAIN",
+      "PSU",
+      "SCOPE"
+     ],
+     "PWR-03": [
+      "MAIN",
+      "PSU"
+     ],
+     "UI-01": [
+      "MAIN",
+      "PSU"
+     ],
+     "UI-02": [
+      "MAIN",
+      "PSU"
+     ]
+    },
+    "nodes": [
+     {
+      "idx": 3,
+      "kind": "suite",
+      "lead": 0,
+      "name": "Main PCBA",
+      "parent": -1
+     },
+     {
+      "idx": 4,
+      "kind": "group",
+      "lead": 2,
+      "name": "Power",
+      "parent": 3
+     },
+     {
+      "id": "PWR-01",
+      "idx": 5,
+      "kind": "test",
+      "lead": 4,
+      "parent": 4,
+      "reqs": [
+       "REQ-004"
+      ],
+      "title": "Powers up at 24 V"
+     },
+     {
+      "idx": 6,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "args": [
+        "500 mA"
+       ],
+       "cmd": "set_current_limit",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 7,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "args": [
+        "24 V"
+       ],
+       "cmd": "set_voltage",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 8,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "args": [
+        "on"
+       ],
+       "cmd": "output",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 9,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "cond": {
+        "a": "RUN",
+        "op": "==",
+        "str": true
+       },
+       "kind": "until",
+       "ref": "MAIN.state",
+       "timeout": 5.0
+      }
+     },
+     {
+      "idx": 10,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "cond": {
+        "a": 0.04,
+        "b": 0.09,
+        "op": "range",
+        "unit": "A"
+       },
+       "kind": "check",
+       "ref": "PSU.current"
+      }
+     },
+     {
+      "idx": 11,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "cond": {
+        "a": 3.2009999999999996,
+        "b": 3.399,
+        "nom": 3.3,
+        "op": "range",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "MAIN.rail_3v3"
+      }
+     },
+     {
+      "idx": 12,
+      "kind": "step",
+      "lead": 6,
+      "parent": 5,
+      "step": {
+       "kind": "cleanup"
+      }
+     },
+     {
+      "idx": 13,
+      "kind": "step",
+      "lead": 8,
+      "parent": 12,
+      "step": {
+       "args": [
+        "off"
+       ],
+       "cmd": "output",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "id": "PWR-02",
+      "idx": 14,
+      "kind": "test",
+      "lead": 4,
+      "parent": 4,
+      "reqs": [
+       "REQ-005"
+      ],
+      "title": "3V3 ripple with both relays on"
+     },
+     {
+      "idx": 15,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 16,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "args": [
+        "1",
+        "on"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 17,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "args": [
+        "2",
+        "on"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 18,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "kind": "wait",
+       "sec": 0.2
+      }
+     },
+     {
+      "idx": 19,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "args": [
+        "1",
+        "vpp"
+       ],
+       "cmd": "measure",
+       "into": "ripple",
+       "kind": "command",
+       "target": "SCOPE"
+      }
+     },
+     {
+      "idx": 20,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "cond": {
+        "a": 0.05,
+        "op": "<",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "ripple"
+      }
+     },
+     {
+      "idx": 21,
+      "kind": "step",
+      "lead": 6,
+      "parent": 14,
+      "step": {
+       "kind": "cleanup"
+      }
+     },
+     {
+      "idx": 22,
+      "kind": "step",
+      "lead": 8,
+      "parent": 21,
+      "step": {
+       "args": [
+        "1",
+        "off"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 23,
+      "kind": "step",
+      "lead": 8,
+      "parent": 21,
+      "step": {
+       "args": [
+        "2",
+        "off"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "id": "PWR-03",
+      "idx": 24,
+      "kind": "test",
+      "lead": 4,
+      "parent": 4,
+      "reqs": [
+       "REQ-006"
+      ],
+      "title": "Brown-out threshold"
+     },
+     {
+      "idx": 25,
+      "kind": "step",
+      "lead": 6,
+      "parent": 24,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "body": [
+       27,
+       28,
+       29,
+       30,
+       31,
+       32,
+       33,
+       34,
+       35,
+       36,
+       37,
+       38,
+       39,
+       40
+      ],
+      "idx": 26,
+      "kind": "step",
+      "lead": 6,
+      "parent": 24,
+      "step": {
+       "kind": "script"
+      }
+     },
+     {
+      "idx": 41,
+      "kind": "step",
+      "lead": 6,
+      "parent": 24,
+      "step": {
+       "cond": {
+        "a": 9.0,
+        "op": "<",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "brownout"
+      }
+     },
+     {
+      "idx": 42,
+      "kind": "step",
+      "lead": 6,
+      "parent": 24,
+      "step": {
+       "kind": "cleanup"
+      }
+     },
+     {
+      "idx": 43,
+      "kind": "step",
+      "lead": 8,
+      "parent": 42,
+      "step": {
+       "args": [
+        "24 V"
+       ],
+       "cmd": "set_voltage",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 44,
+      "kind": "group",
+      "lead": 2,
+      "name": "Firmware",
+      "parent": 3
+     },
+     {
+      "id": "FW-01",
+      "idx": 45,
+      "kind": "test",
+      "lead": 4,
+      "parent": 44,
+      "reqs": [
+       "REQ-011"
+      ],
+      "title": "Boot banner on the debug UART"
+     },
+     {
+      "idx": 46,
+      "kind": "step",
+      "lead": 6,
+      "parent": 45,
+      "step": {
+       "args": [
+        "uart",
+        "115200"
+       ],
+       "cmd": "arm",
+       "into": null,
+       "kind": "command",
+       "target": "LOGIC"
+      }
+     },
+     {
+      "idx": 47,
+      "kind": "step",
+      "lead": 6,
+      "parent": 45,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 48,
+      "kind": "step",
+      "lead": 6,
+      "parent": 45,
+      "step": {
+       "args": [],
+       "cmd": "read",
+       "into": "banner",
+       "kind": "command",
+       "target": "LOGIC"
+      }
+     },
+     {
+      "idx": 49,
+      "kind": "step",
+      "lead": 6,
+      "parent": 45,
+      "step": {
+       "cond": {
+        "a": "self-test OK",
+        "op": "contains"
+       },
+       "kind": "check",
+       "ref": "banner"
+      }
+     },
+     {
+      "idx": 50,
+      "kind": "step",
+      "lead": 6,
+      "parent": 45,
+      "step": {
+       "cond": {
+        "a": "1.4.2",
+        "op": "==",
+        "str": true
+       },
+       "kind": "check",
+       "ref": "MAIN.fw_version"
+      }
+     },
+     {
+      "id": "FW-02",
+      "idx": 51,
+      "kind": "test",
+      "lead": 4,
+      "parent": 44,
+      "reqs": [
+       "REQ-012"
+      ],
+      "title": "Relays follow commands"
+     },
+     {
+      "idx": 52,
+      "kind": "step",
+      "lead": 6,
+      "parent": 51,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 53,
+      "kind": "step",
+      "lead": 6,
+      "parent": 51,
+      "step": {
+       "items": [
+        "1",
+        "2"
+       ],
+       "kind": "for",
+       "v": "n"
+      }
+     },
+     {
+      "idx": 54,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "args": [
+        "$n",
+        "on"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 55,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "kind": "wait",
+       "sec": 0.05
+      }
+     },
+     {
+      "idx": 56,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "cond": {
+        "a": "closed",
+        "op": "==",
+        "str": true
+       },
+       "kind": "check",
+       "ref": "MAIN.relay$n"
+      }
+     },
+     {
+      "idx": 57,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "args": [
+        "$n",
+        "off"
+       ],
+       "cmd": "relay",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 58,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "kind": "wait",
+       "sec": 0.05
+      }
+     },
+     {
+      "idx": 59,
+      "kind": "step",
+      "lead": 8,
+      "parent": 53,
+      "step": {
+       "cond": {
+        "a": "open",
+        "op": "==",
+        "str": true
+       },
+       "kind": "check",
+       "ref": "MAIN.relay$n"
+      }
+     },
+     {
+      "id": "FW-03",
+      "idx": 60,
+      "kind": "test",
+      "lead": 4,
+      "parent": 44,
+      "reqs": [],
+      "title": "Backlight PWM frequency"
+     },
+     {
+      "idx": 61,
+      "kind": "step",
+      "lead": 6,
+      "parent": 60,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 62,
+      "kind": "step",
+      "lead": 6,
+      "parent": 60,
+      "step": {
+       "args": [
+        "2",
+        "freq"
+       ],
+       "cmd": "measure",
+       "into": "pwm",
+       "kind": "command",
+       "target": "SCOPE"
+      }
+     },
+     {
+      "idx": 63,
+      "kind": "step",
+      "lead": 6,
+      "parent": 60,
+      "step": {
+       "cond": {
+        "a": 19000.0,
+        "b": 21000.0,
+        "nom": 20000.0,
+        "op": "range",
+        "unit": "Hz"
+       },
+       "kind": "check",
+       "ref": "pwm"
+      }
+     },
+     {
+      "idx": 64,
+      "kind": "group",
+      "lead": 2,
+      "name": "Operator",
+      "parent": 3
+     },
+     {
+      "id": "UI-01",
+      "idx": 65,
+      "kind": "test",
+      "lead": 4,
+      "parent": 64,
+      "reqs": [
+       "REQ-020"
+      ],
+      "title": "Display shows the set point"
+     },
+     {
+      "idx": 66,
+      "kind": "step",
+      "lead": 6,
+      "parent": 65,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 67,
+      "kind": "step",
+      "lead": 6,
+      "parent": 65,
+      "step": {
+       "args": [
+        "21.5 °C"
+       ],
+       "cmd": "set_point",
+       "into": null,
+       "kind": "command",
+       "target": "MAIN"
+      }
+     },
+     {
+      "idx": 68,
+      "kind": "step",
+      "lead": 6,
+      "parent": 65,
+      "step": {
+       "kind": "ask",
+       "msg": "Does the display read 21.5 °C?"
+      }
+     },
+     {
+      "id": "UI-02",
+      "idx": 69,
+      "kind": "test",
+      "lead": 4,
+      "parent": 64,
+      "reqs": [],
+      "title": "Board temperature after warm-up"
+     },
+     {
+      "idx": 70,
+      "kind": "step",
+      "lead": 6,
+      "parent": 69,
+      "step": {
+       "id": "PWR-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 71,
+      "kind": "step",
+      "lead": 6,
+      "parent": 69,
+      "step": {
+       "kind": "wait",
+       "sec": 2.0
+      }
+     },
+     {
+      "idx": 72,
+      "kind": "step",
+      "lead": 6,
+      "parent": 69,
+      "step": {
+       "as": "board_temp",
+       "kind": "measure",
+       "ref": "MAIN.temp"
+      }
+     },
+     {
+      "idx": 73,
+      "kind": "step",
+      "lead": 6,
+      "parent": 69,
+      "step": {
+       "cond": {
+        "a": 45.0,
+        "op": "<",
+        "unit": "°C"
+       },
+       "kind": "check",
+       "ref": "board_temp"
+      }
+     }
+    ],
+    "tests": [
+     "FW-01",
+     "FW-02",
+     "FW-03",
+     "PWR-01",
+     "PWR-02",
+     "PWR-03",
+     "UI-01",
+     "UI-02"
+    ]
+   }
+  },
+  {
+   "defs": {
+    "errors": [
+     {
+      "line": 6,
+      "msg": "Can't read parameter x=??"
+     },
+     {
+      "line": 10,
+      "msg": "Can't read limit yellow x..y"
+     },
+     {
+      "line": 11,
+      "msg": "Can't read this line"
+     }
+    ],
+    "targets": {
+     "DEV": {
+      "commands": {
+       "ping": {
+        "name": "ping",
+        "params": [],
+        "returns": "ack",
+        "wire": "msg ping"
+       }
+      },
+      "iface": {
+       "parts": [
+        "socket://127.0.0.1:9001",
+        "json-crc16"
+       ],
+       "text": "serial socket://127.0.0.1:9001 json-crc16",
+       "type": "serial"
+      },
+      "name": "DEV",
+      "order": [
+       "state",
+       "fault_A",
+       "temp"
+      ],
+      "telemetry": {
+       "fault_A": {
+        "name": "fault_A",
+        "query": "bit faultFlags 5",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "state": {
+        "name": "state",
+        "query": "field state",
+        "red": null,
+        "unit": "",
+        "yellow": null
+       },
+       "temp": {
+        "name": "temp",
+        "query": "field temp ÷10",
+        "red": null,
+        "unit": "°C",
+        "yellow": null
+       }
+      },
+      "title": "Device"
+     },
+     "PSU": {
+      "commands": {
+       "any": {
+        "name": "any",
+        "params": [
+         {
+          "kind": "any",
+          "name": "a"
+         },
+         {
+          "kind": "range",
+          "name": "b",
+          "range": [
+           1.0,
+           "Infinity"
+          ],
+          "unit": ""
+         }
+        ],
+        "returns": "value",
+        "wire": "A {a}"
+       },
+       "bad": {
+        "name": "bad",
+        "params": [
+         {
+          "kind": "any",
+          "name": "x"
+         }
+        ],
+        "returns": null,
+        "wire": "X"
+       },
+       "output": {
+        "name": "output",
+        "params": [
+         {
+          "choices": [
+           "on",
+           "off"
+          ],
+          "kind": "choice",
+          "name": "state"
+         }
+        ],
+        "returns": null,
+        "wire": "OUTP {state}"
+       },
+       "set_voltage": {
+        "name": "set_voltage",
+        "params": [
+         {
+          "kind": "range",
+          "name": "v",
+          "range": [
+           0.0,
+           30.0
+          ],
+          "unit": "V"
+         }
+        ],
+        "returns": null,
+        "wire": "VOLT {v}"
+       }
+      },
+      "iface": {
+       "parts": [
+        "10.0.0.7:5025",
+        "scpi"
+       ],
+       "text": "lan 10.0.0.7:5025 scpi",
+       "type": "lan"
+      },
+      "name": "PSU",
+      "order": [
+       "voltage",
+       "current",
+       "nope"
+      ],
+      "telemetry": {
+       "current": {
+        "name": "current",
+        "query": "MEAS:CURR?",
+        "red": null,
+        "unit": "A",
+        "yellow": null
+       },
+       "nope": {
+        "name": "nope",
+        "query": "Q",
+        "red": null,
+        "unit": "V",
+        "yellow": null
+       },
+       "voltage": {
+        "name": "voltage",
+        "query": "MEAS:VOLT?",
+        "red": [
+         0.0,
+         28.0
+        ],
+        "unit": "V",
+        "yellow": [
+         0.0,
+         25.0
+        ]
+       }
+      },
+      "title": "Supply"
+     }
+    }
+   },
+   "name": "synthetic",
+   "script": {
+    "ends": [
+     44,
+     41,
+     20,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     20,
+     19,
+     20,
+     41,
+     22,
+     23,
+     27,
+     25,
+     27,
+     27,
+     31,
+     32,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     43,
+     43,
+     44,
+     47,
+     47,
+     47
+    ],
+    "exact": false,
+    "issues": {
+     "11": [
+      "Unit V doesn't match °C"
+     ],
+     "12": [
+      "DEV has no telemetry missing"
+     ],
+     "13": [
+      "Nothing records nothing before this"
+     ],
+     "15": [
+      "Give a time: wait 200 ms"
+     ],
+     "16": [
+      "Give a time: wait 200 ms"
+     ],
+     "22": [
+      "No test T-99"
+     ],
+     "37": [
+      "No target NOPE"
+     ],
+     "38": [
+      "PSU has no command nothing"
+     ],
+     "39": [
+      "set_voltage takes 1 parameter"
+     ],
+     "40": [
+      "Can't read this step"
+     ],
+     "43": [
+      "A step belongs inside a test"
+     ]
+    },
+    "lines": [
+     {
+      "lead": 0,
+      "text": "# header comment"
+     },
+     {
+      "lead": 0,
+      "text": ""
+     },
+     {
+      "lead": 0,
+      "text": "suite S"
+     },
+     {
+      "lead": 2,
+      "text": "group One"
+     },
+     {
+      "lead": 4,
+      "text": "test T-01 First [REQ-1, REQ-2]"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.set_voltage 24 V"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.output on"
+     },
+     {
+      "lead": 6,
+      "text": "measure PSU.voltage as v0"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.set_voltage $v0 V"
+     },
+     {
+      "lead": 6,
+      "text": "check PSU.voltage 24 V ±2%"
+     },
+     {
+      "lead": 6,
+      "text": "check DEV.temp 20 °C .. 30 °C"
+     },
+     {
+      "lead": 6,
+      "text": "check DEV.temp 2 V .. 3 V"
+     },
+     {
+      "lead": 6,
+      "text": "check DEV.missing == 1"
+     },
+     {
+      "lead": 6,
+      "text": "check nothing == 1"
+     },
+     {
+      "lead": 6,
+      "text": "wait until DEV.state == \"IDLE\" within 5 s"
+     },
+     {
+      "lead": 6,
+      "text": "wait until DEV.state == \"IDLE\""
+     },
+     {
+      "lead": 6,
+      "text": "wait soon"
+     },
+     {
+      "lead": 6,
+      "text": "cleanup"
+     },
+     {
+      "lead": 8,
+      "text": "PSU.output off"
+     },
+     {
+      "lead": 8,
+      "text": "DEV.ping -> ack"
+     },
+     {
+      "lead": 4,
+      "text": "test T-02 Second"
+     },
+     {
+      "lead": 6,
+      "text": "call T-01"
+     },
+     {
+      "lead": 6,
+      "text": "call T-99"
+     },
+     {
+      "lead": 6,
+      "text": "for n in 1, 2"
+     },
+     {
+      "lead": 8,
+      "text": "DEV.ping"
+     },
+     {
+      "lead": 8,
+      "text": "repeat 2"
+     },
+     {
+      "lead": 10,
+      "text": "log \"loop\""
+     },
+     {
+      "lead": 6,
+      "text": "script"
+     },
+     {
+      "lead": 8,
+      "text": "x = tlm('DEV.state')"
+     },
+     {
+      "lead": 0,
+      "text": ""
+     },
+     {
+      "lead": 8,
+      "text": "record('got', 1)"
+     },
+     {
+      "lead": 6,
+      "text": "check got == 1"
+     },
+     {
+      "lead": 6,
+      "text": "script on bridge"
+     },
+     {
+      "lead": 8,
+      "text": "import os"
+     },
+     {
+      "lead": 8,
+      "text": "record('b', 2, 'V')"
+     },
+     {
+      "lead": 6,
+      "text": "check b < 3 V"
+     },
+     {
+      "lead": 6,
+      "text": "todo \"later\""
+     },
+     {
+      "lead": 6,
+      "text": "NOPE.thing"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.nothing 1"
+     },
+     {
+      "lead": 6,
+      "text": "PSU.set_voltage 1 2"
+     },
+     {
+      "lead": 6,
+      "text": "frobnicate"
+     },
+     {
+      "lead": 2,
+      "text": "test T-03 Directly in a suite"
+     },
+     {
+      "lead": 4,
+      "text": "log \"ok\""
+     },
+     {
+      "lead": 2,
+      "text": "log \"a step outside a test\""
+     },
+     {
+      "lead": 0,
+      "text": "group Loose"
+     },
+     {
+      "lead": 2,
+      "text": "test T-04 No suite"
+     },
+     {
+      "lead": 4,
+      "text": "ask \"Fine?\""
+     }
+    ],
+    "needs": {
+     "T-01": [
+      "DEV",
+      "PSU"
+     ],
+     "T-02": [
+      "DEV",
+      "NOPE",
+      "PSU"
+     ],
+     "T-03": [],
+     "T-04": []
+    },
+    "nodes": [
+     {
+      "idx": 2,
+      "kind": "suite",
+      "lead": 0,
+      "name": "S",
+      "parent": -1
+     },
+     {
+      "idx": 3,
+      "kind": "group",
+      "lead": 2,
+      "name": "One",
+      "parent": 2
+     },
+     {
+      "id": "T-01",
+      "idx": 4,
+      "kind": "test",
+      "lead": 4,
+      "parent": 3,
+      "reqs": [
+       "REQ-1",
+       "REQ-2"
+      ],
+      "title": "First"
+     },
+     {
+      "idx": 5,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "args": [
+        "24 V"
+       ],
+       "cmd": "set_voltage",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 6,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "args": [
+        "on"
+       ],
+       "cmd": "output",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 7,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "as": "v0",
+       "kind": "measure",
+       "ref": "PSU.voltage"
+      }
+     },
+     {
+      "idx": 8,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "args": [
+        "$v0 V"
+       ],
+       "cmd": "set_voltage",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 9,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": 23.52,
+        "b": 24.48,
+        "nom": 24.0,
+        "op": "range",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "PSU.voltage"
+      }
+     },
+     {
+      "idx": 10,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": 20.0,
+        "b": 30.0,
+        "op": "range",
+        "unit": "°C"
+       },
+       "kind": "check",
+       "ref": "DEV.temp"
+      }
+     },
+     {
+      "idx": 11,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": 2.0,
+        "b": 3.0,
+        "op": "range",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "DEV.temp"
+      }
+     },
+     {
+      "idx": 12,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": 1.0,
+        "op": "==",
+        "unit": ""
+       },
+       "kind": "check",
+       "ref": "DEV.missing"
+      }
+     },
+     {
+      "idx": 13,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": 1.0,
+        "op": "==",
+        "unit": ""
+       },
+       "kind": "check",
+       "ref": "nothing"
+      }
+     },
+     {
+      "idx": 14,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "cond": {
+        "a": "IDLE",
+        "op": "==",
+        "str": true
+       },
+       "kind": "until",
+       "ref": "DEV.state",
+       "timeout": 5.0
+      }
+     },
+     {
+      "idx": 15,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "kind": "wait",
+       "sec": null
+      }
+     },
+     {
+      "idx": 16,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "kind": "wait",
+       "sec": null
+      }
+     },
+     {
+      "idx": 17,
+      "kind": "step",
+      "lead": 6,
+      "parent": 4,
+      "step": {
+       "kind": "cleanup"
+      }
+     },
+     {
+      "idx": 18,
+      "kind": "step",
+      "lead": 8,
+      "parent": 17,
+      "step": {
+       "args": [
+        "off"
+       ],
+       "cmd": "output",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 19,
+      "kind": "step",
+      "lead": 8,
+      "parent": 17,
+      "step": {
+       "args": [],
+       "cmd": "ping",
+       "into": "ack",
+       "kind": "command",
+       "target": "DEV"
+      }
+     },
+     {
+      "id": "T-02",
+      "idx": 20,
+      "kind": "test",
+      "lead": 4,
+      "parent": 3,
+      "reqs": [],
+      "title": "Second"
+     },
+     {
+      "idx": 21,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "id": "T-01",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 22,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "id": "T-99",
+       "kind": "call"
+      }
+     },
+     {
+      "idx": 23,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "items": [
+        "1",
+        "2"
+       ],
+       "kind": "for",
+       "v": "n"
+      }
+     },
+     {
+      "idx": 24,
+      "kind": "step",
+      "lead": 8,
+      "parent": 23,
+      "step": {
+       "args": [],
+       "cmd": "ping",
+       "into": null,
+       "kind": "command",
+       "target": "DEV"
+      }
+     },
+     {
+      "idx": 25,
+      "kind": "step",
+      "lead": 8,
+      "parent": 23,
+      "step": {
+       "kind": "repeat",
+       "n": 2
+      }
+     },
+     {
+      "idx": 26,
+      "kind": "step",
+      "lead": 10,
+      "parent": 25,
+      "step": {
+       "kind": "log",
+       "msg": "loop"
+      }
+     },
+     {
+      "body": [
+       28,
+       30
+      ],
+      "idx": 27,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "kind": "script"
+      }
+     },
+     {
+      "idx": 31,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "cond": {
+        "a": 1.0,
+        "op": "==",
+        "unit": ""
+       },
+       "kind": "check",
+       "ref": "got"
+      }
+     },
+     {
+      "body": [
+       33,
+       34
+      ],
+      "idx": 32,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "bridge": true,
+       "kind": "script"
+      }
+     },
+     {
+      "idx": 35,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "cond": {
+        "a": 3.0,
+        "op": "<",
+        "unit": "V"
+       },
+       "kind": "check",
+       "ref": "b"
+      }
+     },
+     {
+      "idx": 36,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "kind": "todo",
+       "msg": "later"
+      }
+     },
+     {
+      "idx": 37,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "args": [],
+       "cmd": "thing",
+       "into": null,
+       "kind": "command",
+       "target": "NOPE"
+      }
+     },
+     {
+      "idx": 38,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "args": [
+        "1"
+       ],
+       "cmd": "nothing",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 39,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "args": [
+        "1",
+        "2"
+       ],
+       "cmd": "set_voltage",
+       "into": null,
+       "kind": "command",
+       "target": "PSU"
+      }
+     },
+     {
+      "idx": 40,
+      "kind": "step",
+      "lead": 6,
+      "parent": 20,
+      "step": {
+       "kind": "bad"
+      }
+     },
+     {
+      "id": "T-03",
+      "idx": 41,
+      "kind": "test",
+      "lead": 2,
+      "parent": 2,
+      "reqs": [],
+      "title": "Directly in a suite"
+     },
+     {
+      "idx": 42,
+      "kind": "step",
+      "lead": 4,
+      "parent": 41,
+      "step": {
+       "kind": "log",
+       "msg": "ok"
+      }
+     },
+     {
+      "idx": 43,
+      "kind": "step",
+      "lead": 2,
+      "parent": 2,
+      "step": {
+       "kind": "log",
+       "msg": "a step outside a test"
+      }
+     },
+     {
+      "idx": 44,
+      "kind": "group",
+      "lead": 0,
+      "name": "Loose",
+      "parent": -1
+     },
+     {
+      "id": "T-04",
+      "idx": 45,
+      "kind": "test",
+      "lead": 2,
+      "parent": 44,
+      "reqs": [],
+      "title": "No suite"
+     },
+     {
+      "idx": 46,
+      "kind": "step",
+      "lead": 4,
+      "parent": 45,
+      "step": {
+       "kind": "ask",
+       "msg": "Fine?"
+      }
+     }
+    ],
+    "tests": [
+     "T-01",
+     "T-02",
+     "T-03",
+     "T-04"
+    ]
+   }
+  },
+  {
+   "defs": {
+    "errors": [],
+    "targets": {}
+   },
+   "name": "empty",
+   "script": {
+    "ends": [],
+    "exact": false,
+    "issues": {},
+    "lines": [
+     {
+      "lead": 0,
+      "text": ""
+     }
+    ],
+    "needs": {},
+    "nodes": [],
+    "tests": []
+   }
+  },
+  {
+   "defs": {
+    "errors": [],
+    "targets": {
+     "X": {
+      "commands": {},
+      "iface": null,
+      "name": "X",
+      "order": [],
+      "telemetry": {},
+      "title": "x"
+     }
+    }
+   },
+   "name": "no-trailing-newline",
+   "script": {
+    "ends": [
+     3,
+     3,
+     3
+    ],
+    "exact": false,
+    "issues": {},
+    "lines": [
+     {
+      "lead": 0,
+      "text": "suite A"
+     },
+     {
+      "lead": 2,
+      "text": "test A-1 One"
+     },
+     {
+      "lead": 4,
+      "text": "log \"x\""
+     }
+    ],
+    "needs": {
+     "A-1": []
+    },
+    "nodes": [
+     {
+      "idx": 0,
+      "kind": "suite",
+      "lead": 0,
+      "name": "A",
+      "parent": -1
+     },
+     {
+      "id": "A-1",
+      "idx": 1,
+      "kind": "test",
+      "lead": 2,
+      "parent": 0,
+      "reqs": [],
+      "title": "One"
+     },
+     {
+      "idx": 2,
+      "kind": "step",
+      "lead": 4,
+      "parent": 1,
+      "step": {
+       "kind": "log",
+       "msg": "x"
+      }
+     }
+    ],
+    "tests": [
+     "A-1"
+    ]
+   }
+  }
+ ],
+ "cond": [
+  {
+   "a": 0.05,
+   "op": "<",
+   "unit": "V"
+  },
+  {
+   "a": 0.2,
+   "op": "<=",
+   "unit": ""
+  },
+  {
+   "a": 0.0,
+   "op": ">",
+   "unit": "s"
+  },
+  {
+   "a": 2.0,
+   "op": ">=",
+   "unit": "A"
+  },
+  {
+   "a": 1.0,
+   "op": "==",
+   "unit": ""
+  },
+  {
+   "a": 1.0,
+   "op": "==",
+   "unit": ""
+  },
+  {
+   "a": "IDLE",
+   "op": "==",
+   "str": true
+  },
+  {
+   "a": "a b",
+   "op": "==",
+   "str": true
+  },
+  {
+   "a": "self-test OK",
+   "op": "contains"
+  },
+  {
+   "a": 0.04,
+   "b": 0.09,
+   "op": "range",
+   "unit": "A"
+  },
+  {
+   "a": -0.05,
+   "b": 0.05,
+   "op": "range",
+   "unit": "A"
+  },
+  {
+   "a": 15.0,
+   "b": 35.0,
+   "op": "range",
+   "unit": "°C"
+  },
+  {
+   "a": 3.2009999999999996,
+   "b": 3.399,
+   "nom": 3.3,
+   "op": "range",
+   "unit": "V"
+  },
+  {
+   "a": 3.2009999999999996,
+   "b": 3.399,
+   "nom": 3.3,
+   "op": "range",
+   "unit": "V"
+  },
+  {
+   "a": 0.0045000000000000005,
+   "b": 0.0055,
+   "nom": 0.005,
+   "op": "range",
+   "unit": "s"
+  },
+  {
+   "a": 20160.0,
+   "b": 24640.0,
+   "nom": 22400.0,
+   "op": "range",
+   "unit": ""
+  },
+  {
+   "a": 9.8,
+   "b": 10.2,
+   "nom": 10.0,
+   "op": "range",
+   "unit": "s"
+  },
+  null,
+  null,
+  null,
+  null,
+  {
+   "a": -2.0,
+   "b": 2.0,
+   "op": "range",
+   "unit": "°C"
+  },
+  null
+ ],
+ "condPass": [
+  true,
+  false,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false,
+  true,
+  true,
+  true,
+  false,
+  false,
+  true,
+  true,
+  false,
+  false,
+  true
+ ],
+ "condText": [
+  "< 50 mV",
+  "<= 0.2",
+  "> 0 s",
+  ">= 2 A",
+  "== 1",
+  "== 1",
+  "\"IDLE\"",
+  "\"a b\"",
+  "contains \"self-test OK\"",
+  "40 mA to 90 mA",
+  "-50 mA to 50 mA",
+  "15 °C to 35 °C",
+  "3.201 V to 3.399 V",
+  "3.201 V to 3.399 V",
+  "4.5 ms to 5.5 ms",
+  "20160 to 24640",
+  "9.8 s to 10.2 s",
+  "",
+  "",
+  "",
+  "",
+  "-2 °C to 2 °C",
+  ""
+ ],
+ "fmt": [
+  "40 mA",
+  "24 V",
+  "500 µs",
+  "12 kHz",
+  "2 MHz",
+  "0 V",
+  "37.25 °C",
+  "3",
+  "1.235",
+  "1.234 µA",
+  "12000 W",
+  "-50 mA",
+  "22400",
+  "0.1 %"
+ ],
+ "qty": [
+  {
+   "unit": "A",
+   "v": 0.04
+  },
+  {
+   "unit": "V",
+   "v": 24.0
+  },
+  {
+   "unit": "V",
+   "v": 3.3
+  },
+  {
+   "unit": "A",
+   "v": -0.05
+  },
+  {
+   "unit": "Hz",
+   "v": 1500.0
+  },
+  {
+   "unit": "s",
+   "v": 0.5
+  },
+  {
+   "unit": "s",
+   "v": 0.5
+  },
+  {
+   "unit": "Hz",
+   "v": 12000.0
+  },
+  {
+   "unit": "Hz",
+   "v": 2000000.0
+  },
+  {
+   "unit": "A",
+   "v": 9.999999999999999e-06
+  },
+  {
+   "unit": "A",
+   "v": 9.999999999999999e-06
+  },
+  {
+   "unit": "Ω",
+   "v": 1000.0
+  },
+  {
+   "unit": "°C",
+   "v": 37.0
+  },
+  {
+   "unit": "%",
+   "v": 20.0
+  },
+  {
+   "unit": "baud",
+   "v": 115200.0
+  },
+  {
+   "unit": "",
+   "v": 7.0
+  },
+  {
+   "unit": "",
+   "v": 0.2
+  },
+  null,
+  {
+   "unit": "V",
+   "v": 0.005
+  },
+  null,
+  {
+   "unit": "Ω",
+   "v": 0.003
+  },
+  null,
+  {
+   "unit": "",
+   "v": 0.001
+  },
+  null,
+  {
+   "unit": "V",
+   "v": 24.0
+  },
+  {
+   "unit": "V",
+   "v": -0.0
+  }
+ ],
+ "steps": [
+  {
+   "args": [
+    "24 V"
+   ],
+   "cmd": "set_voltage",
+   "into": null,
+   "kind": "command",
+   "target": "PSU"
+  },
+  {
+   "args": [
+    "on"
+   ],
+   "cmd": "output",
+   "into": null,
+   "kind": "command",
+   "target": "PSU"
+  },
+  {
+   "args": [
+    "1",
+    "vpp"
+   ],
+   "cmd": "measure",
+   "into": "ripple",
+   "kind": "command",
+   "target": "SCOPE"
+  },
+  {
+   "args": [
+    "$n",
+    "on"
+   ],
+   "cmd": "relay",
+   "into": null,
+   "kind": "command",
+   "target": "MAIN"
+  },
+  {
+   "args": [
+    "$v0 V"
+   ],
+   "cmd": "set_voltage",
+   "into": null,
+   "kind": "command",
+   "target": "PSU"
+  },
+  {
+   "args": [
+    "setpoint=45 slope=40"
+   ],
+   "cmd": "setParams",
+   "into": "ack",
+   "kind": "command",
+   "target": "DEV"
+  },
+  {
+   "args": [],
+   "cmd": "halt",
+   "into": null,
+   "kind": "command",
+   "target": "DEV"
+  },
+  {
+   "args": [
+    "1",
+    "0"
+   ],
+   "cmd": "setMode",
+   "into": "ack",
+   "kind": "command",
+   "target": "DEV"
+  },
+  {
+   "kind": "wait",
+   "sec": 0.2
+  },
+  {
+   "kind": "wait",
+   "sec": 2.0
+  },
+  {
+   "kind": "wait",
+   "sec": null
+  },
+  {
+   "cond": {
+    "a": "RUN",
+    "op": "==",
+    "str": true
+   },
+   "kind": "until",
+   "ref": "MAIN.state",
+   "timeout": 5.0
+  },
+  {
+   "cond": {
+    "a": 44.0,
+    "op": ">",
+    "unit": "°C"
+   },
+   "kind": "until",
+   "ref": "DEV.temp",
+   "timeout": 15.0
+  },
+  {
+   "cond": {
+    "a": 1.0,
+    "op": "==",
+    "unit": ""
+   },
+   "kind": "until",
+   "ref": "x",
+   "timeout": null
+  },
+  {
+   "cond": {
+    "a": 0.04,
+    "b": 0.09,
+    "op": "range",
+    "unit": "A"
+   },
+   "kind": "check",
+   "ref": "PSU.current"
+  },
+  {
+   "cond": {
+    "a": "closed",
+    "op": "==",
+    "str": true
+   },
+   "kind": "check",
+   "ref": "MAIN.relay$n"
+  },
+  {
+   "cond": {
+    "a": 0.05,
+    "op": "<",
+    "unit": "V"
+   },
+   "kind": "check",
+   "ref": "ripple"
+  },
+  {
+   "cond": {
+    "a": 1.0,
+    "op": "==",
+    "unit": ""
+   },
+   "kind": "check",
+   "ref": "DEV.fault_A"
+  },
+  {
+   "as": "board_temp",
+   "kind": "measure",
+   "ref": "MAIN.temp"
+  },
+  {
+   "kind": "bad"
+  },
+  {
+   "kind": "ask",
+   "msg": "Is the LED green?"
+  },
+  {
+   "kind": "tell",
+   "msg": "Press it"
+  },
+  {
+   "kind": "log",
+   "msg": "hi"
+  },
+  {
+   "kind": "todo",
+   "msg": "Write it"
+  },
+  {
+   "id": "PWR-01",
+   "kind": "call"
+  },
+  {
+   "kind": "repeat",
+   "n": 3
+  },
+  {
+   "items": [
+    "1",
+    "2"
+   ],
+   "kind": "for",
+   "v": "n"
+  },
+  {
+   "items": [
+    "22.5",
+    "24",
+    "25.5"
+   ],
+   "kind": "for",
+   "v": "v"
+  },
+  {
+   "kind": "script"
+  },
+  {
+   "bridge": true,
+   "kind": "script"
+  },
+  {
+   "kind": "cleanup"
+  },
+  {
+   "kind": "bad"
+  },
+  {
+   "kind": "bad"
+  },
+  {
+   "args": [],
+   "cmd": "output",
+   "into": null,
+   "kind": "command",
+   "target": "PSU"
+  },
+  {
+   "kind": "bad"
+  },
+  {
+   "args": [
+    "0.5"
+   ],
+   "cmd": "Gain",
+   "into": null,
+   "kind": "command",
+   "target": "DEV"
+  }
+ ],
+ "trim": [
+  "0.00005",
+  "24",
+  "0.123457",
+  "123457000",
+  "1e-7",
+  "1.5e+21",
+  "3.3",
+  "0.0001234",
+  "100000",
+  "3"
+ ]
+}

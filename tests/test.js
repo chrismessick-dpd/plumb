@@ -109,6 +109,9 @@
     // Signed out: sync refuses.
     let refused = false; try { await ST.sync({ token: '', fetch: gh.fetch }); } catch (e) { refused = /Sign in/.test(e.message); }
     ok(refused, 'sync without a token refuses');
+
+    // The bench bridge's parser reads every corpus item as the page's does.
+    await window.PlumbConformance(ok);
   } catch (e) {
     fail++; say('bad', 'ERROR ' + (e && e.stack || e));
     document.title = 'ERROR';
