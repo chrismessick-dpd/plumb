@@ -53,8 +53,12 @@ project; the page head links the board in Signoff EE (`?project=<id>`).
 - **No bench switch during a run** (`openProject`, Delete bench, and sync refuse): a running test's cleanup reads
   the open bench's targets.
 
-**Not yet written to `plumb_data`** (Chris, 2026-11-24: the first real write waits for a dry run he has seen).
-The repo has only its README. The sync sheet's Preview shows that dry run in his own browser.
+**In `plumb_data`** (2026-11-24, at Chris's OK after a dry run): `projects/bgenerator1.json`, a client's bench
+(`64a725f`). It is generated, not typed: a private script reads the firmware source and the client's pytest suite
+(see the root `CLAUDE.md`, never this repo). Re-generate it there rather than editing its definitions by hand.
+
+- **`todo "…"`** (a step kind): a step not written yet. The test skips, marked Not written yet, so a stub never
+  passes. Telemetry and command names may start with a capital (firmware fields). Pushed: `06e8a67`.
 
 ## Next (to sequence with Chris)
 
